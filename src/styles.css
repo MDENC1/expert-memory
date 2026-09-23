@@ -39,3 +39,27 @@ nav{display:grid;gap:4px}.navBtn{border:0;background:transparent;border-radius:9
 .keyCalendarTime strong{font-size:13px}
 @media(max-width:1200px){.specialSetupGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.specialSetupGrid{grid-template-columns:1fr}.monthlySetupActions{align-items:stretch;flex-direction:column}.epKeyTime strong{font-size:20px}}
+
+/* Higher-contrast schedule text */
+.dateTop span{color:#374151;font-weight:700}
+.times{color:#263244;font-size:11px;font-weight:650;line-height:1.35}
+.times b{color:#111827}
+.helperText{color:#374151;font-size:13px;line-height:1.45}
+.specialSetupField small{color:#4b5563;font-size:11px}
+.monthlySetupActions span,.emptyMonthSetup{color:#374151}
+.bulkBar span{color:#f3f4f6}
+.keyCalendarTime b{font-size:10px;color:#111827}
+.keyCalendarTime strong{font-size:15px;color:#111827}
+.zmanimSettings{margin-bottom:14px;border:2px solid #cfd5dc}
+.sourceBadge{display:inline-flex;align-items:center;background:#111827;color:#fff;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:800;white-space:nowrap}
+.zmanimSettingsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.zmanimSettingsGrid>label,.zmanimSave{border:1px solid #d7dde4;border-radius:10px;padding:12px;display:grid;gap:6px;background:#fff}
+.zmanimSettingsGrid label>span,.zmanimSave>strong{font-size:12px;font-weight:850;color:#111827}
+.zmanimSettingsGrid small,.zmanimSave>span{font-size:11px;color:#4b5563;line-height:1.35}
+.zmanimSettingsGrid input,.zmanimSettingsGrid select{border:1px solid #bfc7d1;border-radius:8px;padding:9px 10px;background:#fff;color:#111827;font-weight:700}
+.readOnlySetting{border:1px solid #bfc7d1;border-radius:8px;padding:9px 10px;background:#f5f7f9;color:#111827;font-weight:750}
+.zmanimSave .primary{margin-top:auto}
+.sourceLine{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px 14px;padding:10px 12px;background:#f1f3f5;border-radius:9px;font-size:11px;color:#263244}
+.sourceLine strong{color:#111827}
+@media(max-width:1200px){.zmanimSettingsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.zmanimSettingsGrid{grid-template-columns:1fr}}
