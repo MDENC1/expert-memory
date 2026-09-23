@@ -221,3 +221,25 @@ body{color:#172b26}
 .generatedTime small{font-size:10px;font-weight:700;color:#506860}
 @media(max-width:1250px){.calendarLayout{grid-template-columns:1fr}.calendarSide{position:static;grid-template-columns:1fr 1fr}.fastDayRow{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.calendarSide{grid-template-columns:1fr}.inlineTimeFields,.formGrid{grid-template-columns:1fr}.fastDayRow{grid-template-columns:1fr}}
+
+/* Force e-paper preview boxes to render as white, never theme-filled */
+.epaper .epTimes>div,
+.epaper .epKeyTime,
+.epaper .epJewishDay{
+  background:#fff!important;
+  color:#000!important;
+  border-color:#000!important;
+}
+.epaper .epTimes>div *,
+.epaper .epKeyTime *,
+.epaper .epJewishDay *,
+.epaper .epNotice *,
+.epaper .epHeader *,
+.epaper .epFooter *{
+  color:#000!important;
+}
+.epaper .epTimes strong{
+  font-size:22px!important;
+  font-weight:950!important;
+  line-height:1.1!important;
+}
