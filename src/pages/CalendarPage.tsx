@@ -3,11 +3,15 @@ import type { CalendarDay } from "../types";
 import { jewishMonthTemplates, templates } from "../data/mock";
 
 type SpecialValues = Record<string,string>;
+type FastEndRule = 42 | 60 | 72;
 
 export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:(d:CalendarDay[])=>void}) {
   const [selected, setSelected] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState("Regular Weekday");
   const [setupMonth, setSetupMonth] = useState("Tishrei");
+  const [postalCode, setPostalCode] = useState("44124");
+  const [fastEndRule, setFastEndRule] = useState<FastEndRule>(42);
+  const [savedZmanim, setSavedZmanim] = useState(true);
   const [specialValues, setSpecialValues] = useState<SpecialValues>({
     shofar: "10:30",
     yk_yizkor: "11:15",
@@ -48,9 +52,22 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
     setSelected(days.filter(d => !d.isShabbos).map(d => d.date));
   };
 
-  const toDisplayTime = (value:string) => {\n    const [h,m] = value.split(":").map(Number);\n    if (!Number.isFinite(h) || !Number.isFinite(m)) return value;\n    const suffix = h >= 12 ? "PM" : "AM";\n    const hour = h % 12 || 12;\n    return `${hour}:${String(m).padStart(2,"0")} ${suffix}`;\n  };\n\n  const saveMonthlySetup = () => {
+  const toDisplayTime = (value:string) => {
+    const [h,m] = value.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return value;
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2,"0")} ${suffix}`;
+  };
+
+  const saveZmanimSettings = () => {
+    setSavedZmanim(true);
+  };
+
+  const saveMonthlySetup = () => {
     setDays(days.map(day => {
-      const generatedKeys = new Set(["hoshana_rabbah","shemini_yizkor","hakafos_day"]);\n      const specialTimes = (day.specialTimes ?? []).filter(item => !generatedKeys.has(item.key));
+      const generatedKeys = new Set(["hoshana_rabbah","shemini_yizkor","hakafos_day"]);
+      const specialTimes = (day.specialTimes ?? []).filter(item => !generatedKeys.has(item.key));
 
       if (day.holiday === "Hoshana Rabbah" && specialValues.hoshana_rabbah) {
         specialTimes.push({key:"hoshana_rabbah",label:"Hoshana Rabbah Shacharis",time:toDisplayTime(specialValues.hoshana_rabbah),importance:"prominent"});
@@ -80,12 +97,82 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
         </div>
       </div>
 
+      <div className="panel zmanimSettings">
+        <div className="panelHead">
+          <div>
+            <span className="eyebrow">Automatic zmanim</span>
+            <h2>MyZmanim Settings</h2>
+            <p className="helperText">
+              Candle lighting, Shabbos/Yom Tov ending, fast-day start and fast-day end times are generated automatically for this location.
+            </p>
+          </div>
+          <span className="sourceBadge">Source: MyZmanim</span>
+        </div>
+
+        <div className="zmanimSettingsGrid">
+          <label>
+            <span>Shul ZIP code</span>
+            <input
+              value={postalCode}
+              inputMode="numeric"
+              maxLength={5}
+              onChange={e => {
+                setPostalCode(e.target.value.replace(/\D/g,"").slice(0,5));
+                setSavedZmanim(false);
+              }}
+            />
+            <small>Admin only · never shown on the magnet</small>
+          </label>
+
+          <label>
+            <span>Fast begins</span>
+            <div className="readOnlySetting">MyZmanim Alos / dawn</div>
+            <small>Calculated separately for every fast date.</small>
+          </label>
+
+          <label>
+            <span>Fast ends</span>
+            <select
+              value={fastEndRule}
+              onChange={e => {
+                setFastEndRule(Number(e.target.value) as FastEndRule);
+                setSavedZmanim(false);
+              }}
+            >
+              <option value={42}>42 minutes after sunset</option>
+              <option value={60}>60 minutes after sunset</option>
+              <option value={72}>72 minutes after sunset</option>
+            </select>
+            <small>Uses MyZmanim sunset + your shul's selected rule.</small>
+          </label>
+
+          <div className="zmanimSave">
+            <strong>Annual auto-population</strong>
+            <span>
+              Save once and all applicable fast days in the Jewish year are recalculated. Individual dates can still be overridden.
+            </span>
+            <button className="primary" onClick={saveZmanimSettings}>
+              {savedZmanim ? "Settings Saved" : "Save & Recalculate Year"}
+            </button>
+          </div>
+        </div>
+
+        <div className="sourceLine">
+          <strong>MyZmanim</strong>
+          <span>ZIP {postalCode || "—"}</span>
+          <span>Fast end rule: {fastEndRule} minutes after sunset</span>
+          <span>Manual overrides allowed per date</span>
+        </div>
+      </div>
+
       <div className="monthlySetup panel">
         <div className="panelHead">
           <div>
             <span className="eyebrow">Monthly guided setup</span>
-            <h2>Set special times once</h2>
-            <p className="helperText">The portal knows the Jewish dates. Enter the shul's times once and it places them on the correct Jewish dates automatically, even when a Jewish month spans two Gregorian months.</p>
+            <h2>Set special shul times once</h2>
+            <p className="helperText">
+              The portal knows the Jewish dates. Enter only the shul-specific times; zmanim-derived items stay automatic.
+            </p>
           </div>
           <select value={setupMonth} onChange={e=>setSetupMonth(e.target.value)}>
             {jewishMonthTemplates.map(m => <option key={m.month}>{m.month}</option>)}
@@ -115,14 +202,14 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
           </>
         ) : (
           <div className="emptyMonthSetup">
-            No standard special-time fields are required for {setupMonth}. The shul can still add notices or custom events.
+            No standard shul-entered special times are required for {setupMonth}. Automatic zmanim still populate normally.
           </div>
         )}
       </div>
 
       <div className="bulkBar">
         <strong>{selectedCount ? `${selectedCount} days selected` : "Optional manual editing"}</strong>
-        <span>Use this for exceptions. Normal Jewish-calendar events should not require manual date selection.</span>
+        <span>Use this for exceptions. Automatic Jewish-calendar events and zmanim do not require date selection.</span>
         <select value={templateName} onChange={e=>setTemplateName(e.target.value)}>
           {templates.map(t => <option key={t.name}>{t.name}</option>)}
         </select>
@@ -149,9 +236,9 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
             </div>
 
             <div className="times">
-              <span>Shach. {day.shacharis}</span>
-              <span>Min. {day.mincha}</span>
-              <span>Maariv {day.maariv}</span>
+              <span><b>Shach.</b> {day.shacharis}</span>
+              <span><b>Min.</b> {day.mincha}</span>
+              <span><b>Maariv</b> {day.maariv}</span>
             </div>
 
             {day.specialTimes?.map(item => (
