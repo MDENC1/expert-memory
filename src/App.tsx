@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, Bell, MonitorSmartphone, Settings, ShieldCheck, LayoutDashboard } from "lucide-react";
+import { CalendarDays, Bell, MonitorSmartphone, Settings, ShieldCheck, LayoutDashboard, WandSparkles } from "lucide-react";
 import { organization, calendarDays as seedDays, notices as seedNotices } from "./data/mock";
 import type { CalendarDay, Notice } from "./types";
 import Dashboard from "./pages/Dashboard";
 import CalendarPage from "./pages/CalendarPage";
+import MonthlySetupPage from "./pages/MonthlySetupPage";
 import NoticesPage from "./pages/NoticesPage";
 import DevicesPage from "./pages/DevicesPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 
-type Tab = "dashboard" | "calendar" | "notices" | "devices" | "settings" | "super";
+type Tab = "dashboard" | "calendar" | "monthly" | "notices" | "devices" | "settings" | "super";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -21,6 +22,7 @@ export default function App() {
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
     ["calendar", "Calendar", CalendarDays],
+    ["monthly", "Monthly Setup", WandSparkles],
     ["notices", "Notices", Bell],
     ["devices", "Magnets", MonitorSmartphone],
     ["settings", "Settings", Settings]
@@ -71,6 +73,7 @@ export default function App() {
           />
         )}
         {tab === "calendar" && <CalendarPage days={calendarDays} setDays={setCalendarDays} />}
+        {tab === "monthly" && <MonthlySetupPage days={calendarDays} setDays={setCalendarDays} />}
         {tab === "notices" && (
           <NoticesPage
             notices={notices}
@@ -81,10 +84,16 @@ export default function App() {
         )}
         {tab === "devices" && <DevicesPage />}
         {tab === "settings" && (
-          <div className="panel">
-            <h2>Settings</h2>
-            <p>Branding, timezone, users, zmanim defaults, integrations, and organization preferences will live here.</p>
-          </div>
+          <>
+            <div className="pageHeader">
+              <div><span className="eyebrow">Organization</span><h1>Settings</h1><p>Branding, users, location, integrations and display defaults.</p></div>
+            </div>
+            <div className="settingsGrid">
+              <div className="panel"><h2>Shul Profile</h2><p>Young Israel of Example</p><p className="helperText">Logo, display name, address, timezone and contact information.</p></div>
+              <div className="panel"><h2>Administrators</h2><p>3 people have access</p><p className="helperText">Invite admins or limit someone to content editing only.</p></div>
+              <div className="panel"><h2>Integrations</h2><p>MyZmanim connected</p><p className="helperText">Additional integrations can be added here later.</p></div>
+            </div>
+          </>
         )}
         {tab === "super" && <SuperAdminPage />}
       </main>
