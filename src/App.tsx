@@ -33,18 +33,12 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brandMark">M</div>
-          <div>
-            <strong>Magnets</strong>
-            <span>Organization Admin</span>
-          </div>
+          <div><strong>Magnets</strong><span>Organization Admin</span></div>
         </div>
 
         <div className="orgCard">
           <div className="orgLogo">{organization.logoText}</div>
-          <div>
-            <strong>{organization.shortName}</strong>
-            <small>{organization.deviceCount} magnets</small>
-          </div>
+          <div><strong>{organization.shortName}</strong><small>{organization.deviceCount} magnets</small></div>
         </div>
 
         <nav>
@@ -72,8 +66,18 @@ export default function App() {
             onAddNotice={() => setTab("notices")}
           />
         )}
-        {tab === "calendar" && <CalendarPage days={calendarDays} setDays={setCalendarDays} />}
+
+        {tab === "calendar" && (
+          <CalendarPage
+            days={calendarDays}
+            setDays={setCalendarDays}
+            notices={notices}
+            setNotices={setNotices}
+          />
+        )}
+
         {tab === "monthly" && <MonthlySetupPage days={calendarDays} setDays={setCalendarDays} />}
+
         {tab === "notices" && (
           <NoticesPage
             notices={notices}
@@ -82,7 +86,9 @@ export default function App() {
             usePush={() => setPushesUsed(v => Math.min(2, v + 1))}
           />
         )}
+
         {tab === "devices" && <DevicesPage />}
+
         {tab === "settings" && (
           <>
             <div className="pageHeader">
@@ -95,6 +101,7 @@ export default function App() {
             </div>
           </>
         )}
+
         {tab === "super" && <SuperAdminPage />}
       </main>
     </div>
