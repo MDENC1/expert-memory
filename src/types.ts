@@ -55,6 +55,16 @@ export type NoticeType =
   | "Event"
   | "General Notice";
 
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly_hebrew";
+
+export type RecurrenceRule = {
+  enabled: boolean;
+  frequency?: RecurrenceFrequency;
+  weekdays?: number[];
+  monthDays?: number[];
+  interval?: number;
+};
+
 export type Notice = {
   id: string;
   type: NoticeType;
@@ -62,6 +72,8 @@ export type Notice = {
   details: string;
   startAt: string;
   endAt: string;
+  eventTime?: string;
+  recurrence?: RecurrenceRule;
   priority: "normal" | "important" | "urgent";
   publishMode: "scheduled" | "immediate";
   status: "draft" | "scheduled" | "live" | "expired";
