@@ -13,3 +13,29 @@ nav{display:grid;gap:4px}.navBtn{border:0;background:transparent;border-radius:9
 .pushBanner{background:#111827;color:#fff;border-radius:13px;padding:16px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}.pushBanner strong,.pushBanner span{display:block}.pushBanner span{font-size:12px;color:#cbd1d9;margin-top:4px}.pushBanner p{font-size:12px;color:#cbd1d9;margin:0}.formPanel{margin-bottom:16px}.formPanel label{display:grid;gap:6px;margin:12px 0;font-size:12px;font-weight:700}.formPanel input,.formPanel textarea,.formPanel select{border:1px solid #d9dfe6;border-radius:8px;padding:10px;background:#fff}.formPanel textarea{min-height:90px;resize:vertical}.formActions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.noticeList{display:grid;gap:10px}.noticeRow{background:#fff;border:1px solid #e0e5e9;border-radius:12px;padding:14px;display:grid;grid-template-columns:150px 1fr 180px;gap:15px;align-items:start}.noticeRow p{font-size:12px;color:#6c7685;margin:5px 0 0}.noticeMeta{text-align:right;display:grid;gap:5px;font-size:11px;color:#7a8492}.noticeMeta b{text-transform:uppercase}
 .tablePanel{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:#778190;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:10px;border-bottom:1px solid #e6eaee}td{padding:12px 10px;border-bottom:1px solid #edf0f2}
 @media(max-width:1050px){.statsGrid{grid-template-columns:repeat(2,1fr)}.twoCol{grid-template-columns:1fr}.sidebar{width:210px}.main{margin-left:210px;width:calc(100% - 210px);padding:24px 20px}.calendar{overflow-x:auto}.dayCell{min-height:140px}.noticeRow{grid-template-columns:110px 1fr}}
+
+.epJewishDay{margin-top:9px;text-align:center;font-size:12px;font-weight:900;letter-spacing:.08em;border:2px solid #111;padding:5px 8px}
+.epKeyTimes{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-top:8px}
+.epKeyTime{border:4px solid #111;text-align:center;padding:8px 6px}
+.epKeyTime b,.epKeyTime strong{display:block}
+.epKeyTime b{font-size:10px;letter-spacing:.06em}
+.epKeyTime strong{font-size:25px;line-height:1.05;margin-top:3px}
+.monthlySetup{margin-bottom:14px}
+.monthlySetup .panelHead select{border:1px solid #d8dde4;border-radius:9px;padding:9px 11px;background:#fff}
+.helperText{margin:5px 0 0;color:#697386;font-size:12px;max-width:650px}
+.specialSetupGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.specialSetupField{border:1px solid #e1e5ea;border-radius:10px;padding:11px;display:grid;gap:5px}
+.specialSetupField>span{font-size:12px;font-weight:800}
+.specialSetupField small{font-size:10px;color:#7a8491}
+.specialSetupField input{border:1px solid #d8dde4;border-radius:8px;padding:8px;background:#fff}
+.monthlySetupActions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:13px}
+.monthlySetupActions span,.emptyMonthSetup{font-size:12px;color:#697386}
+.emptyMonthSetup{padding:14px;border:1px dashed #cfd5dc;border-radius:10px}
+.dayTags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.jewishTag{display:inline-block;background:#111827;color:#fff;border-radius:999px;padding:4px 8px;font-size:9px;font-weight:800}
+.dayCell.roshChodesh{box-shadow:inset 0 0 0 2px #111827}
+.keyCalendarTime{margin-top:7px;border:2px solid #111;padding:5px 6px;display:grid;gap:2px}
+.keyCalendarTime b{font-size:9px;text-transform:uppercase}
+.keyCalendarTime strong{font-size:13px}
+@media(max-width:1200px){.specialSetupGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.specialSetupGrid{grid-template-columns:1fr}.monthlySetupActions{align-items:stretch;flex-direction:column}.epKeyTime strong{font-size:20px}}
