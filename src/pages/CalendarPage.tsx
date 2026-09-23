@@ -9,18 +9,18 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
   const [templateName, setTemplateName] = useState("Regular Weekday");
   const [setupMonth, setSetupMonth] = useState("Tishrei");
   const [specialValues, setSpecialValues] = useState<SpecialValues>({
-    shofar: "10:30 AM",
-    yk_yizkor: "11:15 AM",
-    yk_neilah: "5:45 PM",
-    hakafos_night: "7:45 PM",
-    hakafos_day: "10:45 AM",
-    hoshana_rabbah: "6:30 AM",
-    shemini_yizkor: "10:45 AM",
-    sukkos_shacharis: "9:00 AM",
-    selichos: "6:00 AM",
-    rh_shacharis: "8:00 AM",
-    yk_kol_nidrei: "6:25 PM",
-    yk_shacharis: "8:30 AM"
+    shofar: "10:30",
+    yk_yizkor: "11:15",
+    yk_neilah: "17:45",
+    hakafos_night: "19:45",
+    hakafos_day: "10:45",
+    hoshana_rabbah: "06:30",
+    shemini_yizkor: "10:45",
+    sukkos_shacharis: "09:00",
+    selichos: "06:00",
+    rh_shacharis: "08:00",
+    yk_kol_nidrei: "18:25",
+    yk_shacharis: "08:30"
   });
 
   const selectedCount = selected.length;
@@ -48,18 +48,18 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
     setSelected(days.filter(d => !d.isShabbos).map(d => d.date));
   };
 
-  const saveMonthlySetup = () => {
+  const toDisplayTime = (value:string) => {\n    const [h,m] = value.split(":").map(Number);\n    if (!Number.isFinite(h) || !Number.isFinite(m)) return value;\n    const suffix = h >= 12 ? "PM" : "AM";\n    const hour = h % 12 || 12;\n    return `${hour}:${String(m).padStart(2,"0")} ${suffix}`;\n  };\n\n  const saveMonthlySetup = () => {
     setDays(days.map(day => {
-      const specialTimes = [...(day.specialTimes ?? [])];
+      const generatedKeys = new Set(["hoshana_rabbah","shemini_yizkor","hakafos_day"]);\n      const specialTimes = (day.specialTimes ?? []).filter(item => !generatedKeys.has(item.key));
 
       if (day.holiday === "Hoshana Rabbah" && specialValues.hoshana_rabbah) {
-        specialTimes.push({key:"hoshana_rabbah",label:"Hoshana Rabbah Shacharis",time:specialValues.hoshana_rabbah,importance:"prominent"});
+        specialTimes.push({key:"hoshana_rabbah",label:"Hoshana Rabbah Shacharis",time:toDisplayTime(specialValues.hoshana_rabbah),importance:"prominent"});
       }
       if (day.holiday === "Shemini Atzeres" && specialValues.shemini_yizkor) {
-        specialTimes.push({key:"shemini_yizkor",label:"Yizkor",time:specialValues.shemini_yizkor,importance:"prominent"});
+        specialTimes.push({key:"shemini_yizkor",label:"Yizkor",time:toDisplayTime(specialValues.shemini_yizkor),importance:"prominent"});
       }
       if (day.holiday === "Simchas Torah" && specialValues.hakafos_day) {
-        specialTimes.push({key:"hakafos_day",label:"Hakafos",time:specialValues.hakafos_day,importance:"prominent"});
+        specialTimes.push({key:"hakafos_day",label:"Hakafos",time:toDisplayTime(specialValues.hakafos_day),importance:"prominent"});
       }
 
       return {...day, specialTimes};
@@ -85,7 +85,7 @@ export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:
           <div>
             <span className="eyebrow">Monthly guided setup</span>
             <h2>Set special times once</h2>
-            <p className="helperText">The portal knows the Jewish dates. Enter the shul's times and it places them on the correct days automatically.</p>
+            <p className="helperText">The portal knows the Jewish dates. Enter the shul's times once and it places them on the correct Jewish dates automatically, even when a Jewish month spans two Gregorian months.</p>
           </div>
           <select value={setupMonth} onChange={e=>setSetupMonth(e.target.value)}>
             {jewishMonthTemplates.map(m => <option key={m.month}>{m.month}</option>)}
