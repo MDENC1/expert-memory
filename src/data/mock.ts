@@ -127,9 +127,7 @@ export const jewishMonthTemplates: JewishMonthTemplate[] = [
     {key:"chanukah_lighting",label:"Community Chanukah Lighting",appliesTo:"Chanukah",defaultDisplay:false}
   ]},
   {month:"Teves",specialItems:[
-    {key:"asarah_fast_begins",label:"Asarah B'Teves Fast Begins",appliesTo:"10 Teves",defaultDisplay:true},
-    {key:"asarah_mincha",label:"Fast-Day Mincha",appliesTo:"10 Teves",defaultDisplay:true},
-    {key:"asarah_fast_ends",label:"Fast Ends",appliesTo:"10 Teves",defaultDisplay:true}
+    {key:"asarah_mincha",label:"Fast-Day Mincha",appliesTo:"10 Teves",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
   ]},
   {month:"Shevat",specialItems:[
     {key:"tu_bishvat_event",label:"Tu B'Shvat Program",appliesTo:"15 Shevat",defaultDisplay:false}
@@ -156,15 +154,12 @@ export const jewishMonthTemplates: JewishMonthTemplate[] = [
     {key:"shavuos_yizkor",label:"Shavuos Yizkor",appliesTo:"Shavuos",defaultDisplay:true}
   ]},
   {month:"Tammuz",specialItems:[
-    {key:"17_tammuz_begins",label:"17 Tammuz Fast Begins",appliesTo:"17 Tammuz",defaultDisplay:true},
-    {key:"17_tammuz_mincha",label:"Fast-Day Mincha",appliesTo:"17 Tammuz",defaultDisplay:true},
-    {key:"17_tammuz_ends",label:"Fast Ends",appliesTo:"17 Tammuz",defaultDisplay:true}
+    {key:"17_tammuz_mincha",label:"Fast-Day Mincha",appliesTo:"17 Tammuz",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
   ]},
   {month:"Av",specialItems:[
     {key:"tisha_bav_maariv",label:"Tisha B'Av Maariv / Eicha",appliesTo:"Tisha B'Av",defaultDisplay:true},
     {key:"tisha_bav_shacharis",label:"Tisha B'Av Shacharis",appliesTo:"Tisha B'Av",defaultDisplay:true},
-    {key:"tisha_bav_mincha",label:"Tisha B'Av Mincha",appliesTo:"Tisha B'Av",defaultDisplay:true},
-    {key:"tisha_bav_ends",label:"Fast Ends",appliesTo:"Tisha B'Av",defaultDisplay:true}
+    {key:"tisha_bav_mincha",label:"Tisha B'Av Mincha",appliesTo:"Tisha B'Av",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
   ]},
   {month:"Elul",specialItems:[
     {key:"selichos",label:"Selichos",appliesTo:"Configured Selichos days",defaultDisplay:true,helpText:"Date pattern depends on minhag; organization settings determine when it begins."}
