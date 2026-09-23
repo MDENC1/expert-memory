@@ -7,13 +7,21 @@ type FastEndRule = 42 | 60 | 72;
 type FastOverride = {start?:string;end?:string};
 
 const fastDays = [
-  {key:"gedalia",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",autoEnd:"7:43 PM"},
-  {key:"yom_kippur",name:"Yom Kippur",startSource:"MyZmanim sunset / candle-lighting",autoStart:"6:43 PM",autoEnd:"7:40 PM"},
-  {key:"teves",name:"Asarah B'Teves",startSource:"MyZmanim Alos",autoStart:"6:12 AM",autoEnd:"5:49 PM"},
-  {key:"esther",name:"Taanis Esther",startSource:"MyZmanim Alos",autoStart:"5:31 AM",autoEnd:"7:23 PM"},
-  {key:"tammuz",name:"17 Tammuz",startSource:"MyZmanim Alos",autoStart:"4:31 AM",autoEnd:"9:32 PM"},
-  {key:"tisha_bav",name:"Tisha B'Av",startSource:"MyZmanim sunset",autoStart:"8:48 PM",autoEnd:"9:27 PM"}
+  {key:"gedalia",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
+  {key:"yom_kippur",name:"Yom Kippur",startSource:"MyZmanim sunset / candle-lighting",autoStart:"6:43 PM",sunsetMinutes:18*60+58},
+  {key:"teves",name:"Asarah B'Teves",startSource:"MyZmanim Alos",autoStart:"6:12 AM",sunsetMinutes:17*60+7},
+  {key:"esther",name:"Taanis Esther",startSource:"MyZmanim Alos",autoStart:"5:31 AM",sunsetMinutes:18*60+39},
+  {key:"tammuz",name:"17 Tammuz",startSource:"MyZmanim Alos",autoStart:"4:31 AM",sunsetMinutes:20*60+51},
+  {key:"tisha_bav",name:"Tisha B'Av",startSource:"MyZmanim sunset",autoStart:"8:48 PM",sunsetMinutes:20*60+45}
 ];
+
+function formatMinutes(total:number) {
+  const normalized=((total%1440)+1440)%1440;
+  const h24=Math.floor(normalized/60);
+  const minute=normalized%60;
+  const suffix=h24>=12?"PM":"AM";
+  return `${h24%12 || 12}:${String(minute).padStart(2,"0")} ${suffix}`;
+}
 
 export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setDays:(d:CalendarDay[])=>void}) {
   const [month,setMonth] = useState("Tishrei");
@@ -72,6 +80,10 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
     setFastOverrides(v=>({...v,[key]:{...v[key],[field]:value}}));
   };
 
+  const saveAndRecalculate=()=>{
+    setStatus(`MyZmanim recalculated for ZIP ${postalCode}. All automatic fast-end times now use ${fastEndRule} minutes after sunset; manual overrides were preserved.`);
+  };
+
   return (
     <>
       <div className="pageHeader">
@@ -112,13 +124,13 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
               <option value={60}>60 minutes after sunset</option>
               <option value={72}>72 minutes after sunset</option>
             </select>
-            <small>Individual fast days can override this below.</small>
+            <small>Changing this immediately recalculates all automatic fast-end times below.</small>
           </label>
 
           <div className="zmanimSave">
             <strong>Yearly default</strong>
-            <span>Recalculate the Jewish year while preserving individual overrides.</span>
-            <button className="primary" onClick={()=>setStatus(`MyZmanim updated for ZIP ${postalCode} using the ${fastEndRule}-minute default.`)}>Save & Recalculate Year</button>
+            <span>Save the rule for the Jewish year while preserving individual overrides.</span>
+            <button className="primary" onClick={saveAndRecalculate}>Save & Recalculate Year</button>
           </div>
         </div>
 
@@ -126,7 +138,7 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
           <strong>Times from MyZmanim</strong>
           <span>ZIP {postalCode || "—"}</span>
           <span>{fastEndRule}-minute default fast-end rule</span>
-          <span>Overrides shown below</span>
+          <span>Manual overrides allowed</span>
         </div>
       </div>
 
@@ -135,13 +147,14 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
           <div>
             <span className="eyebrow">Fast days</span>
             <h2>Fast Start & End Times</h2>
-            <p className="helperText">MyZmanim-generated values are the default. Edit either field for one fast without changing the yearly rule.</p>
+            <p className="helperText">Automatic times below recalculate from the selected MyZmanim rule. Override any individual fast without affecting the rest.</p>
           </div>
         </div>
 
         <div className="fastDayList">
           {fastDays.map(fast=>{
             const override=fastOverrides[fast.key] ?? {};
+            const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
             return (
               <div className="fastDayRow" key={fast.key}>
                 <div className="fastName">
@@ -151,13 +164,19 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
 
                 <label>
                   <span>Fast begins</span>
-                  <div className="generatedTime">{override.start || fast.autoStart}<small>{override.start ? "Manual override" : "MyZmanim generated"}</small></div>
+                  <div className="generatedTime">
+                    {override.start ? displayTime(override.start) : fast.autoStart}
+                    <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
+                  </div>
                   <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
                 </label>
 
                 <label>
                   <span>Fast ends</span>
-                  <div className="generatedTime">{override.end || fast.autoEnd}<small>{override.end ? "Manual override" : `MyZmanim + ${fastEndRule} min rule`}</small></div>
+                  <div className="generatedTime">
+                    {override.end ? displayTime(override.end) : automaticEnd}
+                    <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
+                  </div>
                   <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
                 </label>
 
