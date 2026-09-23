@@ -2,6 +2,8 @@ import type { CalendarDay, Notice } from "../types";
 
 export default function MagnetPreview({day, notice}:{day:CalendarDay; notice?:Notice}) {
   const prominent = day.specialTimes?.filter(item => item.importance === "prominent") ?? [];
+  const parsed = new Date(`${day.date}T12:00:00`);
+  const englishDate = new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"}).format(parsed).toUpperCase();
 
   return (
     <div className="panel previewPanel">
@@ -13,13 +15,11 @@ export default function MagnetPreview({day, notice}:{day:CalendarDay; notice?:No
       <div className="epaper">
         <div className="epHeader">
           <strong>YOUNG ISRAEL OF EXAMPLE</strong>
-          <span>{day.hebrewDate} {day.hebrewMonth} 5787 · OCT {day.englishDay}</span>
+          <span>{day.hebrewDate} {day.hebrewMonth} · {englishDate}</span>
         </div>
 
         {(day.holiday || day.isRoshChodesh) && (
-          <div className="epJewishDay">
-            {day.holiday || "ROSH CHODESH"}
-          </div>
+          <div className="epJewishDay">{day.holiday || "ROSH CHODESH"}</div>
         )}
 
         {prominent.length > 0 && (
@@ -35,20 +35,21 @@ export default function MagnetPreview({day, notice}:{day:CalendarDay; notice?:No
 
         <div className="epBody">
           <div className="epTimes">
-            <div><b>SHACHARIS</b><strong>{day.shacharis}</strong></div>
-            <div><b>MINCHA</b><strong>{day.mincha}</strong></div>
-            <div><b>MAARIV</b><strong>{day.maariv}</strong></div>
+            <div><b>SHACHARIS</b><strong>{day.shacharis || "—"}</strong></div>
+            <div><b>MINCHA</b><strong>{day.mincha || "—"}</strong></div>
+            <div><b>MAARIV</b><strong>{day.maariv || "—"}</strong></div>
           </div>
 
           <div className="epNotice">
-            <b>{notice?.headline || day.event || "THIS WEEK"}</b>
-            <span>{notice?.details || "Weekly shiur Wednesday 8:45 PM"}</span>
+            <b>{notice?.headline || day.event || "COMMUNITY UPDATE"}</b>
+            {notice?.eventTime && <strong className="epEventTime">{notice.eventTime}</strong>}
+            <span>{notice?.details || "No special notice scheduled for this day."}</span>
           </div>
         </div>
 
         <div className="epFooter">
-          <span>{day.isRoshChodesh ? "Rosh Chodesh automatically added" : "Jewish calendar synced"}</span>
-          <span>Daf Yomi: Menachos 42</span>
+          <span>{day.isRoshChodesh ? "Rosh Chodesh" : "Jewish calendar synced"}</span>
+          <span>Daf Yomi</span>
         </div>
       </div>
     </div>
