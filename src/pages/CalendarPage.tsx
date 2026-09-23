@@ -1,257 +1,226 @@
 import { useMemo, useState } from "react";
-import type { CalendarDay } from "../types";
-import { jewishMonthTemplates, templates } from "../data/mock";
+import type { CalendarDay, Notice, NoticeType } from "../types";
+import MagnetPreview from "../components/MagnetPreview";
 
-type SpecialValues = Record<string,string>;
-type FastEndRule = 42 | 60 | 72;
+type Props = {
+  days: CalendarDay[];
+  setDays: (days:CalendarDay[]) => void;
+  notices: Notice[];
+  setNotices: (notices:Notice[]) => void;
+};
 
-export default function CalendarPage({days,setDays}:{days:CalendarDay[];setDays:(d:CalendarDay[])=>void}) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [templateName, setTemplateName] = useState("Regular Weekday");
-  const [setupMonth, setSetupMonth] = useState("Tishrei");
-  const [postalCode, setPostalCode] = useState("44124");
-  const [fastEndRule, setFastEndRule] = useState<FastEndRule>(42);
-  const [savedZmanim, setSavedZmanim] = useState(true);
-  const [specialValues, setSpecialValues] = useState<SpecialValues>({
-    shofar: "10:30",
-    yk_yizkor: "11:15",
-    yk_neilah: "17:45",
-    hakafos_night: "19:45",
-    hakafos_day: "10:45",
-    hoshana_rabbah: "06:30",
-    shemini_yizkor: "10:45",
-    sukkos_shacharis: "09:00",
-    selichos: "06:00",
-    rh_shacharis: "08:00",
-    yk_kol_nidrei: "18:25",
-    yk_shacharis: "08:30"
+type MonthCell = {
+  date: string;
+  day: number;
+  hebrewDay: string;
+  hebrewMonth: string;
+  isRoshChodesh: boolean;
+  isShabbos: boolean;
+};
+
+const pad = (n:number) => String(n).padStart(2,"0");
+const isoDate = (d:Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+function hebrewParts(date:Date) {
+  const parts = new Intl.DateTimeFormat("en-u-ca-hebrew",{day:"numeric",month:"short"}).formatToParts(date);
+  const day = parts.find(p=>p.type==="day")?.value ?? "";
+  const month = parts.find(p=>p.type==="month")?.value ?? "";
+  return {day,month};
+}
+
+function buildMonth(year:number,month:number):MonthCell[] {
+  const count = new Date(year,month+1,0).getDate();
+  return Array.from({length:count},(_,i)=>{
+    const d = new Date(year,month,i+1,12);
+    const h = hebrewParts(d);
+    return {
+      date: isoDate(d),
+      day:i+1,
+      hebrewDay:h.day,
+      hebrewMonth:h.month,
+      isRoshChodesh:h.day==="1" || h.day==="30",
+      isShabbos:d.getDay()===6
+    };
   });
+}
 
-  const selectedCount = selected.length;
-  const weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Shabbos"];
-  const blankCount = 4;
-  const monthTemplate = useMemo(
-    () => jewishMonthTemplates.find(m => m.month === setupMonth) ?? jewishMonthTemplates[0],
-    [setupMonth]
-  );
+function noticeMatchesDate(notice:Notice,date:string) {
+  if (date < notice.startAt || date > notice.endAt) return false;
+  if (!notice.recurrence?.enabled) return true;
 
-  const toggle = (date:string) => {
-    setSelected(prev => prev.includes(date) ? prev.filter(d => d !== date) : [...prev, date]);
-  };
+  const d = new Date(`${date}T12:00:00`);
+  if (notice.recurrence.frequency === "daily") return true;
+  if (notice.recurrence.frequency === "weekly") return notice.recurrence.weekdays?.includes(d.getDay()) ?? false;
+  if (notice.recurrence.frequency === "monthly") return notice.recurrence.monthDays?.includes(d.getDate()) ?? false;
+  return true;
+}
 
-  const applyTemplate = () => {
-    const tpl = templates.find(t => t.name === templateName)!;
-    setDays(days.map(day => selected.includes(day.date)
-      ? {...day, shacharis:tpl.shacharis, mincha:tpl.mincha, maariv:tpl.maariv, template:tpl.name}
-      : day
-    ));
+export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
+  const [viewDate,setViewDate] = useState(new Date(2026,8,1,12));
+  const [multiMode,setMultiMode] = useState(false);
+  const [selected,setSelected] = useState<string[]>([]);
+  const [showAdd,setShowAdd] = useState(false);
+  const [newType,setNewType] = useState<NoticeType>("Event");
+  const [newHeadline,setNewHeadline] = useState("");
+  const [newDetails,setNewDetails] = useState("");
+  const [newTime,setNewTime] = useState("");
+
+  const year=viewDate.getFullYear();
+  const month=viewDate.getMonth();
+  const monthName=new Intl.DateTimeFormat("en-US",{month:"long",year:"numeric"}).format(viewDate);
+  const monthCells=useMemo(()=>buildMonth(year,month),[year,month]);
+  const firstDow=new Date(year,month,1,12).getDay();
+
+  const seedByDate=useMemo(()=>new Map(days.map(d=>[d.date,d])),[days]);
+  const selectedDay=selected.length===1 ? selected[0] : undefined;
+  const selectedCell=selectedDay ? monthCells.find(c=>c.date===selectedDay) : undefined;
+
+  const selectedCalendarDay:CalendarDay|undefined = selectedCell ? (() => {
+    const existing=seedByDate.get(selectedCell.date);
+    return existing ?? {
+      date:selectedCell.date,
+      englishDay:selectedCell.day,
+      hebrewDate:selectedCell.hebrewDay,
+      hebrewMonth:selectedCell.hebrewMonth,
+      isRoshChodesh:selectedCell.isRoshChodesh,
+      isShabbos:selectedCell.isShabbos,
+      shacharis:selectedCell.isShabbos?"9:00":"6:30 · 7:30",
+      mincha:"6:25",
+      maariv:selectedCell.isShabbos?"7:35":"8:15",
+      template:selectedCell.isShabbos?"Shabbos":"Regular Weekday"
+    };
+  })() : undefined;
+
+  const previewNotice=selectedDay ? notices.find(n=>noticeMatchesDate(n,selectedDay)) : undefined;
+
+  const changeMonth=(delta:number)=>{
+    setViewDate(new Date(year,month+delta,1,12));
     setSelected([]);
+    setShowAdd(false);
   };
 
-  const selectWeekdays = () => {
-    setSelected(days.filter(d => !d.isShabbos).map(d => d.date));
+  const handleDayClick=(date:string)=>{
+    if (multiMode) {
+      setSelected(v=>v.includes(date)?v.filter(x=>x!==date):[...v,date].sort());
+      return;
+    }
+    setSelected([date]);
+    setShowAdd(false);
   };
 
-  const toDisplayTime = (value:string) => {
-    const [h,m] = value.split(":").map(Number);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return value;
-    const suffix = h >= 12 ? "PM" : "AM";
-    const hour = h % 12 || 12;
-    return `${hour}:${String(m).padStart(2,"0")} ${suffix}`;
+  const updateSelectedDay=(key:"shacharis"|"mincha"|"maariv",value:string)=>{
+    if (!selectedDay || !selectedCalendarDay) return;
+    const next={...selectedCalendarDay,[key]:value};
+    const without=days.filter(d=>d.date!==selectedDay);
+    setDays([...without,next].sort((a,b)=>a.date.localeCompare(b.date)));
   };
 
-  const saveZmanimSettings = () => {
-    setSavedZmanim(true);
-  };
-
-  const saveMonthlySetup = () => {
-    setDays(days.map(day => {
-      const generatedKeys = new Set(["hoshana_rabbah","shemini_yizkor","hakafos_day"]);
-      const specialTimes = (day.specialTimes ?? []).filter(item => !generatedKeys.has(item.key));
-
-      if (day.holiday === "Hoshana Rabbah" && specialValues.hoshana_rabbah) {
-        specialTimes.push({key:"hoshana_rabbah",label:"Hoshana Rabbah Shacharis",time:toDisplayTime(specialValues.hoshana_rabbah),importance:"prominent"});
-      }
-      if (day.holiday === "Shemini Atzeres" && specialValues.shemini_yizkor) {
-        specialTimes.push({key:"shemini_yizkor",label:"Yizkor",time:toDisplayTime(specialValues.shemini_yizkor),importance:"prominent"});
-      }
-      if (day.holiday === "Simchas Torah" && specialValues.hakafos_day) {
-        specialTimes.push({key:"hakafos_day",label:"Hakafos",time:toDisplayTime(specialValues.hakafos_day),importance:"prominent"});
-      }
-
-      return {...day, specialTimes};
+  const addToSelectedDates=()=>{
+    if (!selected.length || !newHeadline.trim()) return;
+    const additions=selected.map((date,i):Notice=>({
+      id:`calendar_${Date.now()}_${i}`,
+      type:newType,
+      headline:newHeadline.trim(),
+      details:newDetails.trim(),
+      startAt:date,
+      endAt:date,
+      eventTime:(newType==="Event" || newType==="Schedule Change") ? newTime : undefined,
+      recurrence:{enabled:false},
+      priority:"normal",
+      publishMode:"scheduled",
+      status:"scheduled"
     }));
+    setNotices([...additions,...notices]);
+    setNewHeadline("");setNewDetails("");setNewTime("");setShowAdd(false);
   };
 
   return (
     <>
       <div className="pageHeader">
         <div>
-          <span className="eyebrow">Schedule Manager</span>
-          <h1>October 2026</h1>
-          <p>Tishrei – Cheshvan 5787 · Jewish dates and Rosh Chodesh are automatic.</p>
+          <span className="eyebrow">Calendar</span>
+          <h1>{monthName}</h1>
+          <p>Browse past or future months, edit individual days, select multiple dates, and preview exactly what members will see.</p>
         </div>
         <div className="headerActions">
-          <button className="secondary" onClick={selectWeekdays}>Select non-Shabbos days</button>
-          <button className="primary" disabled={!selectedCount} onClick={applyTemplate}>Apply Template</button>
+          <button className="secondary" onClick={()=>changeMonth(-1)}>← Previous</button>
+          <button className="secondary" onClick={()=>setViewDate(new Date(2026,8,1,12))}>This Month</button>
+          <button className="secondary" onClick={()=>changeMonth(1)}>Next →</button>
         </div>
       </div>
 
-      <div className="panel zmanimSettings">
-        <div className="panelHead">
-          <div>
-            <span className="eyebrow">Automatic zmanim</span>
-            <h2>MyZmanim Settings</h2>
-            <p className="helperText">
-              Candle lighting, Shabbos/Yom Tov ending, fast-day start and fast-day end times are generated automatically for this location.
-            </p>
-          </div>
-          <span className="sourceBadge">Source: MyZmanim</span>
-        </div>
-
-        <div className="zmanimSettingsGrid">
-          <label>
-            <span>Shul ZIP code</span>
-            <input
-              value={postalCode}
-              inputMode="numeric"
-              maxLength={5}
-              onChange={e => {
-                setPostalCode(e.target.value.replace(/\D/g,"").slice(0,5));
-                setSavedZmanim(false);
-              }}
-            />
-            <small>Admin only · never shown on the magnet</small>
-          </label>
-
-          <label>
-            <span>Fast begins</span>
-            <div className="readOnlySetting">MyZmanim Alos / dawn</div>
-            <small>Calculated separately for every fast date.</small>
-          </label>
-
-          <label>
-            <span>Fast ends</span>
-            <select
-              value={fastEndRule}
-              onChange={e => {
-                setFastEndRule(Number(e.target.value) as FastEndRule);
-                setSavedZmanim(false);
-              }}
-            >
-              <option value={42}>42 minutes after sunset</option>
-              <option value={60}>60 minutes after sunset</option>
-              <option value={72}>72 minutes after sunset</option>
-            </select>
-            <small>Uses MyZmanim sunset + your shul's selected rule.</small>
-          </label>
-
-          <div className="zmanimSave">
-            <strong>Annual auto-population</strong>
-            <span>
-              Save once and all applicable fast days in the Jewish year are recalculated. Individual dates can still be overridden.
-            </span>
-            <button className="primary" onClick={saveZmanimSettings}>
-              {savedZmanim ? "Settings Saved" : "Save & Recalculate Year"}
-            </button>
-          </div>
-        </div>
-
-        <div className="sourceLine">
-          <strong>MyZmanim</strong>
-          <span>ZIP {postalCode || "—"}</span>
-          <span>Fast end rule: {fastEndRule} minutes after sunset</span>
-          <span>Manual overrides allowed per date</span>
-        </div>
+      <div className="calendarToolbar">
+        <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
+          {multiMode ? "✓ Selecting Multiple Days" : "Select Multiple Days"}
+        </button>
+        <span>{selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected` : "Click a day to edit and preview it."}</span>
+        {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
 
-      <div className="monthlySetup panel">
-        <div className="panelHead">
-          <div>
-            <span className="eyebrow">Monthly guided setup</span>
-            <h2>Set special shul times once</h2>
-            <p className="helperText">
-              The portal knows the Jewish dates. Enter only the shul-specific times; zmanim-derived items stay automatic.
-            </p>
+      <div className="calendarLayout">
+        <div className="calendarWrap">
+          <div className="calendar">
+            {["Sun","Mon","Tue","Wed","Thu","Fri","Shabbos"].map(w=><div key={w} className="weekday">{w}</div>)}
+            {Array.from({length:firstDow}).map((_,i)=><div key={`blank-${i}`} className="dayCell empty" />)}
+            {monthCells.map(cell=>{
+              const existing=seedByDate.get(cell.date);
+              const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
+              return (
+                <button
+                  key={cell.date}
+                  className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""}`}
+                  onClick={()=>handleDayClick(cell.date)}
+                >
+                  <div className="dateTop"><strong>{cell.day}</strong><span>{cell.hebrewDay} {cell.hebrewMonth}</span></div>
+                  <div className="dayTags">
+                    {cell.isRoshChodesh && <span className="jewishTag">Rosh Chodesh</span>}
+                    {matching.length>0 && <span className="eventCount">{matching.length} scheduled</span>}
+                  </div>
+                  <div className="times">
+                    <span><b>Shach.</b> {existing?.shacharis || (cell.isShabbos?"9:00":"6:30 · 7:30")}</span>
+                    <span><b>Min.</b> {existing?.mincha || "6:25"}</span>
+                    <span><b>Maariv</b> {existing?.maariv || (cell.isShabbos?"7:35":"8:15")}</span>
+                  </div>
+                  {existing?.specialTimes?.slice(0,1).map(item=><div className="keyCalendarTime" key={item.key}><b>{item.label}</b><strong>{item.time}</strong></div>)}
+                  {matching.slice(0,2).map(n=><div className="eventTag" key={n.id}>{n.eventTime && <b>{n.eventTime} · </b>}{n.headline}</div>)}
+                </button>
+              );
+            })}
           </div>
-          <select value={setupMonth} onChange={e=>setSetupMonth(e.target.value)}>
-            {jewishMonthTemplates.map(m => <option key={m.month}>{m.month}</option>)}
-          </select>
         </div>
 
-        {monthTemplate.specialItems.length ? (
-          <>
-            <div className="specialSetupGrid">
-              {monthTemplate.specialItems.map(item => (
-                <label key={item.key} className="specialSetupField">
-                  <span>{item.label}</span>
-                  <small>{item.appliesTo}</small>
-                  <input
-                    type="time"
-                    value={specialValues[item.key] && /^\d{2}:\d{2}$/.test(specialValues[item.key]) ? specialValues[item.key] : ""}
-                    onChange={e=>setSpecialValues(v=>({...v,[item.key]:e.target.value}))}
-                  />
-                  {item.helpText && <small>{item.helpText}</small>}
-                </label>
-              ))}
-            </div>
-            <div className="monthlySetupActions">
-              <span>Only the relevant Jewish dates receive each item.</span>
-              <button className="primary" onClick={saveMonthlySetup}>Save {setupMonth} Special Times</button>
-            </div>
-          </>
-        ) : (
-          <div className="emptyMonthSetup">
-            No standard shul-entered special times are required for {setupMonth}. Automatic zmanim still populate normally.
-          </div>
-        )}
-      </div>
-
-      <div className="bulkBar">
-        <strong>{selectedCount ? `${selectedCount} days selected` : "Optional manual editing"}</strong>
-        <span>Use this for exceptions. Automatic Jewish-calendar events and zmanim do not require date selection.</span>
-        <select value={templateName} onChange={e=>setTemplateName(e.target.value)}>
-          {templates.map(t => <option key={t.name}>{t.name}</option>)}
-        </select>
-      </div>
-
-      <div className="calendar">
-        {weekdays.map(w => <div key={w} className="weekday">{w}</div>)}
-        {Array.from({length:blankCount}).map((_,i)=><div key={`blank-${i}`} className="dayCell empty" />)}
-        {days.map(day => (
-          <button
-            key={day.date}
-            className={`dayCell ${selected.includes(day.date) ? "selected" : ""} ${day.isShabbos ? "shabbos" : ""} ${day.isRoshChodesh ? "roshChodesh" : ""}`}
-            onClick={()=>toggle(day.date)}
-          >
-            <div className="dateTop">
-              <strong>{day.englishDay}</strong>
-              <span>{day.hebrewDate} {day.hebrewMonth}</span>
-            </div>
-
-            <div className="dayTags">
-              {day.isRoshChodesh && <span className="jewishTag">Rosh Chodesh</span>}
-              {day.holiday && <span className="jewishTag">{day.holiday}</span>}
-              {!day.holiday && <span className="templateTag">{day.template}</span>}
-            </div>
-
-            <div className="times">
-              <span><b>Shach.</b> {day.shacharis}</span>
-              <span><b>Min.</b> {day.mincha}</span>
-              <span><b>Maariv</b> {day.maariv}</span>
-            </div>
-
-            {day.specialTimes?.map(item => (
-              <div className="keyCalendarTime" key={item.key}>
-                <b>{item.label}</b>
-                <strong>{item.time}</strong>
+        <aside className="calendarSide">
+          {selectedCalendarDay ? (
+            <>
+              <div className="panel compactPanel">
+                <div className="panelHead"><div><span className="eyebrow">Selected day</span><h2>{new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selectedCalendarDay.date}T12:00:00`))}</h2></div></div>
+                <div className="inlineTimeFields">
+                  <label>Shacharis<input value={selectedCalendarDay.shacharis || ""} onChange={e=>updateSelectedDay("shacharis",e.target.value)} /></label>
+                  <label>Mincha<input value={selectedCalendarDay.mincha || ""} onChange={e=>updateSelectedDay("mincha",e.target.value)} /></label>
+                  <label>Maariv<input value={selectedCalendarDay.maariv || ""} onChange={e=>updateSelectedDay("maariv",e.target.value)} /></label>
+                </div>
+                <button className="primary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
               </div>
-            ))}
-
-            {day.event && <div className="eventTag">{day.event}</div>}
-          </button>
-        ))}
+              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} />
+            </>
+          ) : (
+            <div className="panel emptyPreview"><strong>Select one day</strong><span>Its editable schedule and magnet preview will appear here.</span></div>
+          )}
+        </aside>
       </div>
+
+      {showAdd && selected.length>0 && (
+        <div className="panel calendarAddPanel">
+          <div className="panelHead"><div><span className="eyebrow">Add to calendar</span><h2>{selected.length===1?"This day":`${selected.length} selected days`}</h2></div><button className="secondary" onClick={()=>setShowAdd(false)}>Close</button></div>
+          <div className="formGrid">
+            <label>Type<select value={newType} onChange={e=>setNewType(e.target.value as NoticeType)}><option>Event</option><option>Schedule Change</option><option>General Notice</option><option>Sponsorship</option><option>Yahrtzeit</option></select></label>
+            {(newType==="Event" || newType==="Schedule Change") && <label>Time<input type="time" value={newTime} onChange={e=>setNewTime(e.target.value)} /></label>}
+          </div>
+          <label>Headline<input value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="e.g. Daf Yomi Shiur" /></label>
+          <label>Details<textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="Optional details" /></label>
+          <div className="formActions"><button className="primary" onClick={addToSelectedDates}>Add to Selected Date{selected.length===1?"":"s"}</button></div>
+        </div>
+      )}
     </>
   );
 }
