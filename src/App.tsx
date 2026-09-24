@@ -330,10 +330,10 @@ export default function App() {
 
         {tab === "calendar" && (
           <CalendarPage
-            days={calendarDays}
-            setDays={setCalendarDays}
             notices={notices}
             setNotices={setNotices}
+            scheduleEntries={scheduleEntries}
+            shulName={shulName}
           />
         )}
 
