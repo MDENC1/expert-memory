@@ -730,3 +730,18 @@ body{color:#172b26}
   font-weight:800;
 }
 .calendarKeyTime b{font-weight:900}
+
+/* Yom Tov precedence */
+.yomTovScheduleMissing{
+  display:grid;
+  gap:4px;
+  margin:8px 0 12px;
+  padding:10px 12px;
+  border:1px solid #d8cda9;
+  border-radius:8px;
+  background:#fffaf0;
+  color:#443b24;
+  font-size:11px;
+  line-height:1.35;
+}
+.yomTovScheduleMissing b{font-size:12px}
