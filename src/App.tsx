@@ -37,12 +37,50 @@ export type LiveScheduleEntry = {
   sort_order: number;
 };
 
+type SpecialScheduleDay = {
+  event_date:string;
+  title:string|null;
+  replace_normal_schedule:boolean;
+};
+
+type SpecialScheduleEntry = {
+  event_date:string;
+  title:string;
+  event_time:string|null;
+  approximate:boolean;
+  note:string|null;
+  sort_order:number;
+};
+
 function initials(name:string){
   return name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase() || "M";
 }
 
+function localIsoDate(date=new Date()){
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,"0");
+  const d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+
+function prettyTime(t:string|null){
+  if(!t) return "";
+  const [h,m]=t.split(":").map(Number);
+  const d=new Date(2000,0,1,h,m);
+  return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"}).format(d);
+}
+
+function hebrewParts(date:Date){
+  const parts=new Intl.DateTimeFormat("en-u-ca-hebrew",{day:"numeric",month:"long",year:"numeric"}).formatToParts(date);
+  return {
+    day:parts.find(p=>p.type==="day")?.value || "",
+    month:parts.find(p=>p.type==="month")?.value || "",
+    year:parts.find(p=>p.type==="year")?.value || ""
+  };
+}
+
 function mapNotice(row:any):Notice {
-  const now = new Date().toISOString().slice(0,10);
+  const now = localIsoDate();
   const status:Notice["status"] = row.archived_at ? "expired" : row.display_start <= now && row.display_end >= now ? "live" : row.display_start > now ? "scheduled" : "expired";
   const priority:Notice["priority"] = row.priority_level === 3 ? "urgent" : row.priority_level === 2 ? "important" : "normal";
   return {
@@ -65,6 +103,66 @@ function mapNotice(row:any):Notice {
   };
 }
 
+function buildLiveDay(
+  schedule:LiveScheduleEntry[],
+  specialDay:SpecialScheduleDay|undefined,
+  specialEntries:SpecialScheduleEntry[]
+):CalendarDay {
+  const now=new Date();
+  const today=localIsoDate(now);
+  const h=hebrewParts(now);
+  const dow=now.getDay();
+
+  const base:CalendarDay={
+    date:today,
+    englishDay:now.getDate(),
+    hebrewDate:h.day,
+    hebrewMonth:`${h.month} ${h.year}`,
+    isShabbos:dow===6,
+    isRoshChodesh:h.day==="1" || h.day==="30",
+    holiday:specialDay?.title || undefined,
+    template:specialDay?.title || (dow===6 ? "Shabbos" : "Regular")
+  };
+
+  if(specialDay?.replace_normal_schedule && specialEntries.length){
+    const times=(needle:string)=>specialEntries
+      .filter(e=>e.title.toLowerCase().includes(needle))
+      .filter(e=>e.event_time)
+      .map(e=>prettyTime(e.event_time))
+      .filter(Boolean);
+    const shacharis=times("shacharis");
+    const mincha=times("mincha");
+    const maariv=times("maariv");
+    return {
+      ...base,
+      shacharis:shacharis.join(" · ") || undefined,
+      mincha:mincha.join(" · ") || undefined,
+      maariv:maariv.join(" · ") || undefined,
+      event:specialDay.title || undefined
+    };
+  }
+
+  const todayRules=schedule.filter(r=>r.day_of_week===dow);
+  const fixed=(service:string)=>todayRules
+    .filter(r=>(r.service_type||"").toLowerCase()===service && r.service_time)
+    .map(r=>prettyTime(r.service_time))
+    .filter(Boolean);
+  const ruleBased=(service:string)=>todayRules
+    .filter(r=>(r.service_type||"").toLowerCase()===service && !r.service_time)
+    .map(r=>{
+      const source=(r.timing_source||"rule").replaceAll("_"," ");
+      const off=r.timing_offset_minutes||0;
+      return `${source}${off ? ` ${off>0?"+":""}${off}m` : ""}`;
+    });
+
+  return {
+    ...base,
+    shacharis:[...fixed("shacharis"),...ruleBased("shacharis")].join(" · ") || undefined,
+    mincha:[...fixed("mincha"),...ruleBased("mincha")].join(" · ") || undefined,
+    maariv:[...fixed("maariv"),...ruleBased("maariv")].join(" · ") || undefined
+  };
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>(seedDays);
@@ -73,6 +171,8 @@ export default function App() {
   const [postalCode,setPostalCode] = useState("");
   const [devices,setDevices] = useState<LiveDevice[]>([]);
   const [scheduleEntries,setScheduleEntries] = useState<LiveScheduleEntry[]>([]);
+  const [specialDay,setSpecialDay] = useState<SpecialScheduleDay|undefined>();
+  const [specialEntries,setSpecialEntries] = useState<SpecialScheduleEntry[]>([]);
   const [pushesUsed,setPushesUsed] = useState(0);
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
@@ -80,6 +180,10 @@ export default function App() {
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
   const healthyDevices = activeDevices.filter(d=>String(d.status).toLowerCase()==="healthy");
+  const livePreviewDay=useMemo(
+    ()=>buildLiveDay(scheduleEntries,specialDay,specialEntries),
+    [scheduleEntries,specialDay,specialEntries]
+  );
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
@@ -94,16 +198,18 @@ export default function App() {
     let cancelled=false;
     async function loadLiveData(){
       setLoading(true); setLoadError("");
-      const today = new Date().toISOString().slice(0,10);
-      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes] = await Promise.all([
+      const today = localIsoDate();
+      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes] = await Promise.all([
         supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",PILOT_SHUL_ID).single(),
         supabase.from("magnets").select("*").eq("shul_id",PILOT_SHUL_ID).order("device_code"),
         supabase.from("notices_events").select("*").eq("shul_id",PILOT_SHUL_ID).is("archived_at",null).order("display_start"),
         supabase.from("schedule_entries").select("*").eq("shul_id",PILOT_SHUL_ID).eq("active",true).order("day_of_week").order("sort_order"),
-        supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",PILOT_SHUL_ID).eq("sent_on",today)
+        supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",PILOT_SHUL_ID).eq("sent_on",today),
+        supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",PILOT_SHUL_ID).eq("event_date",today).maybeSingle(),
+        supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",PILOT_SHUL_ID).eq("event_date",today).eq("active",true).order("sort_order")
       ]);
       if(cancelled) return;
-      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error;
+      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error;
       if(firstError){
         setLoadError(firstError.message);
       } else {
@@ -112,6 +218,8 @@ export default function App() {
         setDevices((deviceRes.data || []) as LiveDevice[]);
         setNotices((noticeRes.data || []).map(mapNotice));
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
+        setSpecialDay((specialDayRes.data || undefined) as SpecialScheduleDay|undefined);
+        setSpecialEntries((specialEntryRes.data || []) as SpecialScheduleEntry[]);
         setPushesUsed(pushRes.count || 0);
       }
       setLoading(false);
@@ -122,6 +230,8 @@ export default function App() {
       .on("postgres_changes",{event:"*",schema:"public",table:"magnets",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
       .on("postgres_changes",{event:"*",schema:"public",table:"notices_events",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
       .on("postgres_changes",{event:"*",schema:"public",table:"schedule_entries",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_days",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_entries",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
       .subscribe();
 
     return ()=>{cancelled=true; supabase.removeChannel(channel);};
@@ -161,6 +271,7 @@ export default function App() {
         {tab === "dashboard" && (
           <Dashboard
             days={calendarDays}
+            previewDay={livePreviewDay}
             notices={notices}
             remainingPushes={remainingPushes}
             onGoCalendar={() => setTab("calendar")}
