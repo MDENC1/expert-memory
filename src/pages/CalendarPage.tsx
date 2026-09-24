@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CalendarDay, Notice, NoticeType } from "../types";
+import type { LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
+import { PILOT_SHUL_ID, supabase } from "../lib/supabase";
 
 type Props = {
-  days: CalendarDay[];
-  setDays: (days:CalendarDay[]) => void;
   notices: Notice[];
   setNotices: (notices:Notice[]) => void;
+  scheduleEntries: LiveScheduleEntry[];
+  shulName: string;
 };
 
 type MonthCell = {
@@ -16,6 +18,21 @@ type MonthCell = {
   hebrewMonth: string;
   isRoshChodesh: boolean;
   isShabbos: boolean;
+};
+
+type SpecialDay = {
+  event_date: string;
+  title: string | null;
+  replace_normal_schedule: boolean;
+};
+
+type SpecialEntry = {
+  event_date: string;
+  title: string;
+  event_time: string | null;
+  approximate: boolean;
+  note: string | null;
+  sort_order: number;
 };
 
 const pad = (n:number) => String(n).padStart(2,"0");
@@ -55,8 +72,8 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
-  const [viewDate,setViewDate] = useState(new Date(2026,8,1,12));
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName}:Props) {
+  const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
   const [showAdd,setShowAdd] = useState(false);
@@ -64,32 +81,101 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
   const [newHeadline,setNewHeadline] = useState("");
   const [newDetails,setNewDetails] = useState("");
   const [newTime,setNewTime] = useState("");
+  const [specialDays,setSpecialDays] = useState<SpecialDay[]>([]);
+  const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
+  const [loading,setLoading] = useState(false);
+  const [error,setError] = useState("");
 
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
   const monthName=new Intl.DateTimeFormat("en-US",{month:"long",year:"numeric"}).format(viewDate);
   const monthCells=useMemo(()=>buildMonth(year,month),[year,month]);
   const firstDow=new Date(year,month,1,12).getDay();
+  const startDate=`${year}-${pad(month+1)}-01`;
+  const endDate=`${year}-${pad(month+1)}-${pad(new Date(year,month+1,0).getDate())}`;
 
-  const seedByDate=useMemo(()=>new Map(days.map(d=>[d.date,d])),[days]);
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadMonth(){
+      setLoading(true);
+      setError("");
+      const [daysRes,entriesRes]=await Promise.all([
+        supabase.from("special_schedule_days")
+          .select("event_date,title,replace_normal_schedule")
+          .eq("shul_id",PILOT_SHUL_ID)
+          .gte("event_date",startDate)
+          .lte("event_date",endDate)
+          .order("event_date"),
+        supabase.from("special_schedule_entries")
+          .select("event_date,title,event_time,approximate,note,sort_order")
+          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("active",true)
+          .gte("event_date",startDate)
+          .lte("event_date",endDate)
+          .order("event_date")
+          .order("sort_order")
+      ]);
+      if(cancelled)return;
+      const err=daysRes.error||entriesRes.error;
+      if(err)setError(err.message);
+      else{
+        setSpecialDays((daysRes.data||[]) as SpecialDay[]);
+        setSpecialEntries((entriesRes.data||[]) as SpecialEntry[]);
+      }
+      setLoading(false);
+    }
+    loadMonth();
+    return()=>{cancelled=true};
+  },[startDate,endDate]);
+
+  const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
+  const entriesMap=useMemo(()=>{
+    const m=new Map<string,SpecialEntry[]>();
+    for(const e of specialEntries)m.set(e.event_date,[...(m.get(e.event_date)||[]),e]);
+    return m;
+  },[specialEntries]);
+
+  const prettyTime=(value:string|null)=>{
+    if(!value)return "";
+    const [h,m]=value.split(":").map(Number);
+    return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"})
+      .format(new Date(2000,0,1,h,m));
+  };
+
+  const weeklyRowText=(r:LiveScheduleEntry)=>{
+    if(r.service_time)return prettyTime(r.service_time);
+    const source=(r.timing_source||"rule").replaceAll("_"," ");
+    const off=r.timing_offset_minutes||0;
+    return `${source}${off?` ${off>0?"+":""}${off}m`:""}${r.follows_text?` - ${r.follows_text}`:""}`;
+  };
+
+  const rowsForDate=(date:string)=>{
+    const d=new Date(`${date}T12:00:00`);
+    const special=dayMap.get(date);
+    const rows=entriesMap.get(date)||[];
+    if(special?.replace_normal_schedule&&rows.length){
+      return rows.map(r=>({label:r.title,time:r.event_time?prettyTime(r.event_time):"",note:r.note||""}));
+    }
+    return scheduleEntries
+      .filter(r=>r.day_of_week===d.getDay())
+      .map(r=>({label:r.display_name||r.service_type.replaceAll("_"," "),time:weeklyRowText(r),note:""}));
+  };
+
   const selectedDay=selected.length===1 ? selected[0] : undefined;
   const selectedCell=selectedDay ? monthCells.find(c=>c.date===selectedDay) : undefined;
+  const selectedRows=selectedDay ? rowsForDate(selectedDay) : [];
+  const selectedSpecial=selectedDay ? dayMap.get(selectedDay) : undefined;
 
-  const selectedCalendarDay:CalendarDay|undefined = selectedCell ? (() => {
-    const existing=seedByDate.get(selectedCell.date);
-    return existing ?? {
-      date:selectedCell.date,
-      englishDay:selectedCell.day,
-      hebrewDate:selectedCell.hebrewDay,
-      hebrewMonth:selectedCell.hebrewMonth,
-      isRoshChodesh:selectedCell.isRoshChodesh,
-      isShabbos:selectedCell.isShabbos,
-      shacharis:selectedCell.isShabbos?"9:00":"6:30 · 7:30",
-      mincha:"6:25",
-      maariv:selectedCell.isShabbos?"7:35":"8:15",
-      template:selectedCell.isShabbos?"Shabbos":"Regular Weekday"
-    };
-  })() : undefined;
+  const selectedCalendarDay:CalendarDay|undefined = selectedCell ? {
+    date:selectedCell.date,
+    englishDay:selectedCell.day,
+    hebrewDate:selectedCell.hebrewDay,
+    hebrewMonth:selectedCell.hebrewMonth,
+    isRoshChodesh:selectedCell.isRoshChodesh,
+    isShabbos:selectedCell.isShabbos,
+    holiday:selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title) ? selectedSpecial.title : undefined,
+    shulScheduleRows:selectedRows
+  } : undefined;
 
   const previewNotice=selectedDay ? notices.find(n=>noticeMatchesDate(n,selectedDay)) : undefined;
 
@@ -108,25 +194,32 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
     setShowAdd(false);
   };
 
-  const updateSelectedDay=(key:"shacharis"|"mincha"|"maariv",value:string)=>{
-    if (!selectedDay || !selectedCalendarDay) return;
-    const next={...selectedCalendarDay,[key]:value};
-    const without=days.filter(d=>d.date!==selectedDay);
-    setDays([...without,next].sort((a,b)=>a.date.localeCompare(b.date)));
-  };
-
-  const addToSelectedDates=()=>{
+  const addToSelectedDates=async()=>{
     if (!selected.length || !newHeadline.trim()) return;
-    const additions=selected.map((date,i):Notice=>({
-      id:`calendar_${Date.now()}_${i}`,
-      type:newType,
-      headline:newHeadline.trim(),
-      details:newDetails.trim(),
-      startAt:date,
-      endAt:date,
-      eventTime:(newType==="Event" || newType==="Schedule Change") ? newTime : undefined,
+    const payload=selected.map(date=>({
+      shul_id:PILOT_SHUL_ID,
+      content_type:newType,
+      title:newHeadline.trim(),
+      details:newDetails.trim()||null,
+      display_start:date,
+      display_end:date,
+      event_time:(newType==="Event" || newType==="Schedule Change") && newTime ? newTime : null,
+      recurring:false,
+      active:true,
+      priority_level:2
+    }));
+    const {data,error}=await supabase.from("notices_events").insert(payload).select("*");
+    if(error){setError(error.message);return;}
+    const additions:Notice[]=(data||[]).map((row:any)=>({
+      id:row.id,
+      type:row.content_type,
+      headline:row.title,
+      details:row.details||"",
+      startAt:row.display_start,
+      endAt:row.display_end,
+      eventTime:row.event_time||undefined,
       recurrence:{enabled:false},
-      priority:"normal",
+      priority:"important",
       publishMode:"scheduled",
       status:"scheduled"
     }));
@@ -138,22 +231,23 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
     <>
       <div className="pageHeader">
         <div>
-          <span className="eyebrow">Calendar</span>
+          <span className="eyebrow">Calendar - LIVE SUPABASE</span>
           <h1>{monthName}</h1>
           <p>Browse past or future months, edit individual days, select multiple dates, and preview exactly what members will see.</p>
         </div>
         <div className="headerActions">
           <button className="secondary" onClick={()=>changeMonth(-1)}>← Previous</button>
-          <button className="secondary" onClick={()=>setViewDate(new Date(2026,8,1,12))}>This Month</button>
+          <button className="secondary" onClick={()=>setViewDate(new Date())}>This Month</button>
           <button className="secondary" onClick={()=>changeMonth(1)}>Next →</button>
         </div>
       </div>
 
+      {error && <div className="panel" style={{marginBottom:14,borderColor:"#c44"}}><strong>Calendar error:</strong> {error}</div>}
       <div className="calendarToolbar">
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
-          {multiMode ? "✓ Selecting Multiple Days" : "Select Multiple Days"}
+          {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
         </button>
-        <span>{selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected` : "Click a day to edit and preview it."}</span>
+        <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected` : "Click a day to see its real schedule and preview.")}</span>
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
 
@@ -163,8 +257,10 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
             {["Sun","Mon","Tue","Wed","Thu","Fri","Shabbos"].map(w=><div key={w} className="weekday">{w}</div>)}
             {Array.from({length:firstDow}).map((_,i)=><div key={`blank-${i}`} className="dayCell empty" />)}
             {monthCells.map(cell=>{
-              const existing=seedByDate.get(cell.date);
+              const rows=rowsForDate(cell.date);
+              const special=dayMap.get(cell.date);
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
+              const holiday=special?.title && !/^tishrei schedule$/i.test(special.title) ? special.title : undefined;
               return (
                 <button
                   key={cell.date}
@@ -173,15 +269,14 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
                 >
                   <div className="dateTop"><strong>{cell.day}</strong><span>{cell.hebrewDay} {cell.hebrewMonth}</span></div>
                   <div className="dayTags">
-                    {cell.isRoshChodesh && <span className="jewishTag">Rosh Chodesh</span>}
+                    {holiday && <span className="jewishTag">{holiday}</span>}
+                    {cell.isRoshChodesh && !holiday && <span className="jewishTag">Rosh Chodesh</span>}
                     {matching.length>0 && <span className="eventCount">{matching.length} scheduled</span>}
                   </div>
                   <div className="times">
-                    <span><b>Shach.</b> {existing?.shacharis || (cell.isShabbos?"9:00":"6:30 · 7:30")}</span>
-                    <span><b>Min.</b> {existing?.mincha || "6:25"}</span>
-                    <span><b>Maariv</b> {existing?.maariv || (cell.isShabbos?"7:35":"8:15")}</span>
+                    {rows.slice(0,4).map((r,i)=><span key={i}><b>{r.label}</b> {r.time}</span>)}
+                    {rows.length>4 && <span>+{rows.length-4} more</span>}
                   </div>
-                  {existing?.specialTimes?.slice(0,1).map(item=><div className="keyCalendarTime" key={item.key}><b>{item.label}</b><strong>{item.time}</strong></div>)}
                   {matching.slice(0,2).map(n=><div className="eventTag" key={n.id}>{n.eventTime && <b>{n.eventTime} · </b>}{n.headline}</div>)}
                 </button>
               );
@@ -194,14 +289,12 @@ export default function CalendarPage({days,setDays,notices,setNotices}:Props) {
             <>
               <div className="panel compactPanel">
                 <div className="panelHead"><div><span className="eyebrow">Selected day</span><h2>{new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selectedCalendarDay.date}T12:00:00`))}</h2></div></div>
-                <div className="inlineTimeFields">
-                  <label>Shacharis<input value={selectedCalendarDay.shacharis || ""} onChange={e=>updateSelectedDay("shacharis",e.target.value)} /></label>
-                  <label>Mincha<input value={selectedCalendarDay.mincha || ""} onChange={e=>updateSelectedDay("mincha",e.target.value)} /></label>
-                  <label>Maariv<input value={selectedCalendarDay.maariv || ""} onChange={e=>updateSelectedDay("maariv",e.target.value)} /></label>
+                <div className="miniSchedule">
+                  {selectedRows.map((r,i)=><div key={i}><b>{r.label}</b><span>{r.time}{r.note?` - ${r.note}`:""}</span></div>)}
                 </div>
                 <button className="primary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
               </div>
-              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} />
+              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} />
             </>
           ) : (
             <div className="panel emptyPreview"><strong>Select one day</strong><span>Its editable schedule and magnet preview will appear here.</span></div>
