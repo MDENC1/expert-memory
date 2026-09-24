@@ -596,3 +596,28 @@ body{color:#172b26}
   direction:rtl;
   text-align:right;
 }
+
+/* Calendar: date-specific manual schedule overrides */
+.selectedDayEditList{display:grid;gap:2px;margin-top:8px}
+.selectedDayEditRow{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #edf2f0}
+.selectedDayEditRow>span{display:grid;gap:2px}
+.selectedDayEditRow b{font-size:14px;color:#172b26}
+.selectedDayEditRow small{font-size:10px;color:#5a7069;font-weight:600}
+.selectedDayEditRow input{width:100%;border:1px solid #bcd1c9;border-radius:8px;padding:8px;background:#fff;color:#172b26;font-weight:900}
+.selectedDayActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.selectedDayActions .primary,.selectedDayActions .secondary{flex:1 1 160px}
+.daySaveMessage{margin-top:10px;padding:8px 10px;border-radius:8px;background:#e9f5f0;color:#28584c;font-size:11px;font-weight:800}
+
+/* Calendar preview renders the real 648x480 canvas and scales it down to FIT */
+.fitPreviewPanel{overflow:visible}
+.epaperFitViewport{width:100%;overflow:hidden;position:relative}
+.epaperFitCanvas{
+  width:648px!important;
+  height:480px!important;
+  aspect-ratio:auto!important;
+  transform-origin:top left;
+  flex:none;
+}
+@media(max-width:760px){
+  .selectedDayEditRow{grid-template-columns:1fr}
+}
