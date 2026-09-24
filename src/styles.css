@@ -669,3 +669,32 @@ body{color:#172b26}
   .selectedDayEditRow{grid-template-columns:1fr}
   .selectedDayEditRow input[type="time"]{width:100%;min-width:0}
 }
+
+/* Use a clean 12-hour text field for manual day edits instead of the browser's native time control */
+.selectedDayEditRow{
+  grid-template-columns:minmax(0,1fr) 132px;
+}
+.selectedDayEditRow .manualTimeInput{
+  width:132px;
+  min-width:132px;
+  padding:10px 12px;
+  border:1px solid #bcd1c9;
+  border-radius:8px;
+  background:#fff;
+  color:#172b26;
+  font-size:16px;
+  line-height:1.1;
+  font-weight:900;
+  text-align:center;
+  letter-spacing:.01em;
+  appearance:none;
+  -webkit-appearance:none;
+}
+.selectedDayEditRow .manualTimeInput:focus{
+  outline:2px solid #2f7d6d;
+  outline-offset:1px;
+  border-color:#2f7d6d;
+}
+@media(max-width:760px){
+  .selectedDayEditRow .manualTimeInput{width:100%;min-width:0}
+}
