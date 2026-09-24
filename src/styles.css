@@ -385,3 +385,24 @@ body{color:#172b26}
 .epHebrewDate{
   text-align:right;
 }
+
+/* Refine header title: visually centered with logo while starting at its top edge */
+.epBrandText{
+  height:52px;
+  display:grid;
+  grid-template-rows:1fr auto;
+  padding-top:0;
+}
+.epShulName{
+  align-self:center;
+  font-size:15px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:.01em;
+  margin-top:-1px;
+}
+.epDateRow{
+  align-self:end;
+  margin-top:0;
+  padding-bottom:1px;
+}
