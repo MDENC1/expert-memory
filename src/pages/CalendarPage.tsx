@@ -476,8 +476,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
 
     if(dow===6){
-      const special=dayMap.get(date);
-      if(special?.replace_normal_schedule)return [];
+      // Non-Yom-Tov special schedules (for example Parshas Bereishis,
+      // a bar mitzvah, or another special Shabbos schedule) still need
+      // the normal Shabbos-ending time. Yom Tov was already handled above.
       return [{
         key:"shabbos_ends",
         label:"Shabbos Ends",
