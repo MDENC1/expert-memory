@@ -58,6 +58,12 @@ type EditRow = {
   note: string;
 };
 
+type BulkEditRow = {
+  label: string;
+  timeText: string;
+  mixed: boolean;
+};
+
 const pad = (n:number) => String(n).padStart(2,"0");
 const isoDate = (d:Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
@@ -114,6 +120,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [editRows,setEditRows] = useState<EditRow[]>([]);
   const [savingDay,setSavingDay] = useState(false);
   const [daySaveMessage,setDaySaveMessage] = useState("");
+  const [bulkEditRows,setBulkEditRows] = useState<BulkEditRow[]>([]);
+  const [bulkSaveMessage,setBulkSaveMessage] = useState("");
 
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
@@ -359,6 +367,34 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setDaySaveMessage("");
   },[selectedDay,overrides,specialEntries,zmanim,scheduleEntries]);
 
+  useEffect(()=>{
+    if(selected.length<=1){
+      setBulkEditRows([]);
+      setBulkSaveMessage("");
+      return;
+    }
+
+    const schedules=selected.map(date=>rowsForDate(date));
+    const first=schedules[0]||[];
+    const commonLabels=first
+      .map(r=>r.label)
+      .filter((label,index,arr)=>arr.indexOf(label)===index)
+      .filter(label=>schedules.every(rows=>rows.some(r=>r.label===label)));
+
+    const next=commonLabels.map(label=>{
+      const times=schedules.map(rows=>rows.find(r=>r.label===label)?.time||"");
+      const unique=[...new Set(times)];
+      return {
+        label,
+        timeText:unique.length===1?unique[0]:"",
+        mixed:unique.length>1
+      };
+    });
+
+    setBulkEditRows(next);
+    setBulkSaveMessage("");
+  },[selected.join("|"),overrides,specialEntries,zmanim,scheduleEntries]);
+
   const selectedCalendarDay:CalendarDay|undefined = selectedCell ? {
     date:selectedCell.date,
     englishDay:selectedCell.day,
@@ -385,6 +421,69 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     setSelected([date]);
     setShowAdd(false);
+  };
+
+  const saveBulkSelectedTimes=async(rowsToSave:BulkEditRow[]=bulkEditRows)=>{
+    if(selected.length<=1||!rowsToSave.length)return;
+    setSavingDay(true);
+    setBulkSaveMessage("");
+    setError("");
+
+    const selectedSet=new Set(selected);
+    const allPayload:any[]=[];
+
+    for(const date of selected){
+      const currentRows=rowsForDate(date);
+      currentRows.forEach((row,index)=>{
+        const bulkRow=rowsToSave.find(edit=>edit.label===row.label);
+        const replacement=bulkRow?.timeText.trim()
+          ? normalizeDisplayTime(bulkRow.timeText)
+          : row.time;
+        allPayload.push({
+          shul_id:PILOT_SHUL_ID,
+          event_date:date,
+          service_type:row.label,
+          service_time:displayTimeTo24(replacement)||null,
+          timing_source:"fixed",
+          sort_order:(index+1)*10,
+          active:true,
+          priority_level:3
+        });
+      });
+    }
+
+    const deleteRes=await supabase.from("schedule_overrides")
+      .delete()
+      .eq("shul_id",PILOT_SHUL_ID)
+      .in("event_date",selected);
+
+    if(deleteRes.error){
+      setError(deleteRes.error.message);
+      setSavingDay(false);
+      return;
+    }
+
+    const insertRes=await supabase.from("schedule_overrides")
+      .insert(allPayload)
+      .select("id,event_date,service_type,service_time,timing_source,sort_order,active,priority_level");
+
+    if(insertRes.error){
+      setError(insertRes.error.message);
+      setSavingDay(false);
+      return;
+    }
+
+    setOverrides(prev=>[
+      ...prev.filter(o=>!selectedSet.has(o.event_date)),
+      ...((insertRes.data||[]) as ScheduleOverride[])
+    ]);
+    setBulkEditRows(rowsToSave.map(row=>({
+      ...row,
+      timeText:row.timeText.trim()?normalizeDisplayTime(row.timeText):row.timeText,
+      mixed:false
+    })));
+    setBulkSaveMessage(`Saved for ${selected.length} selected days only. Your regular rules were not changed.`);
+    setSavingDay(false);
   };
 
   const saveSelectedDayTimes=async(rowsToSave:EditRow[]=editRows)=>{
@@ -584,6 +683,66 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               </div>
               <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} fit />
             </>
+          ) : selected.length>1 ? (
+            <div className="panel compactPanel">
+              <div className="panelHead">
+                <div>
+                  <span className="eyebrow">Multiple days selected</span>
+                  <h2>{selected.length} Selected Days</h2>
+                  <p className="bulkEditHelp">Change a shared time once and it will update only these dates. Blank “Mixed” fields keep each day’s current time until you enter a new one.</p>
+                </div>
+              </div>
+
+              {bulkEditRows.length ? (
+                <div className="selectedDayEditList">
+                  {bulkEditRows.map((r,i)=>(
+                    <label className="selectedDayEditRow" key={`${r.label}-bulk-${i}`}>
+                      <span>
+                        <b>{r.label}</b>
+                        {r.mixed&&<small>Different times on selected days</small>}
+                      </span>
+                      <input
+                        className="manualTimeInput"
+                        type="text"
+                        inputMode="text"
+                        value={r.timeText}
+                        placeholder={r.mixed?"Mixed":"6:45 PM"}
+                        aria-label={`${r.label} time for selected days`}
+                        onFocus={e=>e.currentTarget.select()}
+                        onChange={e=>setBulkEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:e.target.value}:row))}
+                        onKeyDown={async e=>{
+                          if(e.key!=="Enter")return;
+                          e.preventDefault();
+                          const raw=e.currentTarget.value;
+                          const normalized=raw.trim()?normalizeDisplayTime(raw):"";
+                          const nextRows=bulkEditRows.map((row,index)=>index===i?{...row,timeText:normalized,mixed:false}:row);
+                          setBulkEditRows(nextRows);
+                          await saveBulkSelectedTimes(nextRows);
+                          e.currentTarget.blur();
+                        }}
+                        onBlur={e=>{
+                          if(!e.currentTarget.value.trim())return;
+                          const normalized=normalizeDisplayTime(e.currentTarget.value);
+                          setBulkEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:normalized,mixed:false}:row));
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="bulkNoCommon">These dates do not share the same schedule items. Select dates with at least one matching service to edit them together.</div>
+              )}
+
+              {bulkEditRows.length>0&&(
+                <div className="selectedDayActions">
+                  <button className="primary" disabled={savingDay} onClick={()=>saveBulkSelectedTimes()}>
+                    {savingDay?"Saving...":`Save Times to ${selected.length} Days`}
+                  </button>
+                </div>
+              )}
+              {bulkSaveMessage&&<div className="daySaveMessage">{bulkSaveMessage}</div>}
+              <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to Selected Days</button>
+            </div>
           ) : (
             <div className="panel emptyPreview"><strong>Select one day</strong><span>Its editable schedule and magnet preview will appear here.</span></div>
           )}
