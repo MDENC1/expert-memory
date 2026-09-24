@@ -698,3 +698,21 @@ body{color:#172b26}
 @media(max-width:760px){
   .selectedDayEditRow .manualTimeInput{width:100%;min-width:0}
 }
+
+/* Multiple selected-day editing */
+.bulkEditHelp{
+  margin:6px 0 0;
+  color:#536a63;
+  font-size:11px;
+  line-height:1.4;
+}
+.bulkNoCommon{
+  margin-top:10px;
+  padding:12px;
+  border:1px dashed #c7d8d2;
+  border-radius:9px;
+  background:#fafcfb;
+  color:#4f665f;
+  font-size:12px;
+  line-height:1.4;
+}
