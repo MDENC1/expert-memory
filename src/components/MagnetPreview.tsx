@@ -25,8 +25,10 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
           </div>
           <div className="epBrandText">
             <strong className="epShulName">{shulName.toUpperCase()}</strong>
-            <div className="epEnglishDate" dir="ltr">{englishDate}</div>
-            <div className="epHebrewDate" dir="rtl" lang="he">{day.hebrewFullDate || `${day.hebrewDate} ${day.hebrewMonth}`}</div>
+            <div className="epDateRow">
+              <div className="epEnglishDate" dir="ltr">{englishDate}</div>
+              <div className="epHebrewDate" dir="rtl" lang="he">{day.hebrewFullDate || `${day.hebrewDate} ${day.hebrewMonth}`}</div>
+            </div>
           </div>
         </div>
 
