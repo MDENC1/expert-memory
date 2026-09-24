@@ -35,6 +35,10 @@ export type LiveScheduleEntry = {
   display_name: string | null;
   follows_text: string | null;
   sort_order: number;
+  round_to_minutes: number | null;
+  round_direction: "down" | "up" | "nearest" | null;
+  use_weekly_earliest: boolean | null;
+  weekly_group: string | null;
 };
 
 type SpecialScheduleDay = {
