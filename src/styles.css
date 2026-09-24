@@ -564,3 +564,35 @@ body{color:#172b26}
   white-space:nowrap;
   text-align:right;
 }
+
+/* Pin the date line to the full text area of the header */
+.epBrandHeader{
+  position:relative;
+}
+.epBrandText{
+  position:static;
+}
+.epDateRow{
+  position:absolute;
+  left:70px;
+  right:0;
+  bottom:8px;
+  width:auto;
+  height:12px;
+  margin:0;
+  padding:0;
+}
+.epEnglishDate{
+  position:absolute;
+  left:0;
+  bottom:0;
+}
+.epHebrewDate{
+  position:absolute;
+  right:0;
+  bottom:0;
+  margin:0;
+  width:auto;
+  direction:rtl;
+  text-align:right;
+}
