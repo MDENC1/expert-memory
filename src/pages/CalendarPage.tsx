@@ -9,6 +9,7 @@ type Props = {
   setNotices: (notices:Notice[]) => void;
   scheduleEntries: LiveScheduleEntry[];
   shulName: string;
+  postalCode: string;
 };
 
 type MonthCell = {
@@ -33,6 +34,11 @@ type SpecialEntry = {
   approximate: boolean;
   note: string | null;
   sort_order: number;
+};
+
+type ZmanimBatch = {
+  plagHaMincha?: Record<string,string>;
+  sunset?: Record<string,string>;
 };
 
 const pad = (n:number) => String(n).padStart(2,"0");
@@ -72,7 +78,7 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
@@ -85,6 +91,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
+  const [zmanim,setZmanim] = useState<ZmanimBatch>({});
+  const [zmanimError,setZmanimError] = useState("");
 
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
@@ -99,7 +107,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     async function loadMonth(){
       setLoading(true);
       setError("");
-      const [daysRes,entriesRes]=await Promise.all([
+      setZmanimError("");
+
+      const supabasePromise=Promise.all([
         supabase.from("special_schedule_days")
           .select("event_date,title,replace_normal_schedule")
           .eq("shul_id",PILOT_SHUL_ID)
@@ -115,18 +125,35 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .order("event_date")
           .order("sort_order")
       ]);
+
+      const zmanimPromise=postalCode
+        ? fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
+            .then(r=>{if(!r.ok)throw new Error(`Zmanim request failed (${r.status})`);return r.json();})
+            .then(data=>data?.times||{})
+            .catch(err=>({__error:String(err?.message||err)}))
+        : Promise.resolve({__error:"No ZIP code configured"});
+
+      const [[daysRes,entriesRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
       if(cancelled)return;
+
       const err=daysRes.error||entriesRes.error;
       if(err)setError(err.message);
       else{
         setSpecialDays((daysRes.data||[]) as SpecialDay[]);
         setSpecialEntries((entriesRes.data||[]) as SpecialEntry[]);
       }
+
+      if((zmanimRes as any).__error){
+        setZmanim({});
+        setZmanimError((zmanimRes as any).__error);
+      }else{
+        setZmanim(zmanimRes as ZmanimBatch);
+      }
       setLoading(false);
     }
     loadMonth();
     return()=>{cancelled=true};
-  },[startDate,endDate]);
+  },[startDate,endDate,postalCode]);
 
   const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
   const entriesMap=useMemo(()=>{
@@ -142,11 +169,66 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       .format(new Date(2000,0,1,h,m));
   };
 
-  const weeklyRowText=(r:LiveScheduleEntry)=>{
+  const timeMinutesFromIso=(value:string|undefined)=>{
+    if(!value)return null;
+    const match=value.match(/T(\d{2}):(\d{2})/);
+    if(!match)return null;
+    return Number(match[1])*60+Number(match[2]);
+  };
+
+  const minutesToDisplay=(minutes:number)=>{
+    const normalized=((minutes%1440)+1440)%1440;
+    const h=Math.floor(normalized/60);
+    const m=normalized%60;
+    return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"})
+      .format(new Date(2000,0,1,h,m));
+  };
+
+  const floorToFive=(minutes:number)=>minutes-(minutes%5);
+
+  const weekStart=(date:string)=>{
+    const d=new Date(`${date}T12:00:00`);
+    d.setDate(d.getDate()-d.getDay());
+    return isoDate(d);
+  };
+
+  const weeklyResolvedTime=(date:string,source:string|null,offset:number|null)=>{
+    if(source!=="plag"&&source!=="sunset")return "";
+    const start=weekStart(date);
+    const sunday=new Date(`${start}T12:00:00`);
+    const map=source==="plag" ? zmanim.plagHaMincha : zmanim.sunset;
+    if(!map)return "";
+
+    const targets:number[]=[];
+    for(let i=0;i<=4;i++){
+      const d=new Date(sunday);
+      d.setDate(sunday.getDate()+i);
+      const key=isoDate(d);
+      const base=timeMinutesFromIso(map[key]);
+      if(base!==null)targets.push(base+(offset||0));
+    }
+    if(!targets.length)return "";
+    return minutesToDisplay(floorToFive(Math.min(...targets)));
+  };
+
+  const specialResolvedTime=(date:string,special:SpecialDay|undefined,row:SpecialEntry)=>{
+    if(!special || !/^tishrei schedule$/i.test(special.title||"")){
+      return row.event_time?prettyTime(row.event_time):"";
+    }
+    const title=row.title.trim().toLowerCase();
+    if(title.includes("plag mincha")){
+      return weeklyResolvedTime(date,"plag",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+    }
+    if(title==="mincha / maariv"){
+      return weeklyResolvedTime(date,"sunset",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+    }
+    return row.event_time?prettyTime(row.event_time):"";
+  };
+
+  const weeklyRowText=(date:string,r:LiveScheduleEntry)=>{
     if(r.service_time)return prettyTime(r.service_time);
-    const source=(r.timing_source||"rule").replaceAll("_"," ");
-    const off=r.timing_offset_minutes||0;
-    return `${source}${off?` ${off>0?"+":""}${off}m`:""}${r.follows_text?` - ${r.follows_text}`:""}`;
+    const resolved=weeklyResolvedTime(date,r.timing_source,r.timing_offset_minutes);
+    return resolved || "Timing unavailable";
   };
 
   const rowsForDate=(date:string)=>{
@@ -154,11 +236,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const special=dayMap.get(date);
     const rows=entriesMap.get(date)||[];
     if(special?.replace_normal_schedule&&rows.length){
-      return rows.map(r=>({label:r.title,time:r.event_time?prettyTime(r.event_time):"",note:r.note||""}));
+      return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
     }
     return scheduleEntries
       .filter(r=>r.day_of_week===d.getDay())
-      .map(r=>({label:r.display_name||r.service_type.replaceAll("_"," "),time:weeklyRowText(r),note:""}));
+      .map(r=>({label:r.display_name||r.service_type.replaceAll("_"," "),time:weeklyRowText(date,r),note:""}));
   };
 
   const selectedDay=selected.length===1 ? selected[0] : undefined;
@@ -248,6 +330,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
         </button>
         <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected` : "Click a day to see its real schedule and preview.")}</span>
+        {!loading && <small>{zmanimError ? "Zmanim fallback unavailable" : "Timing fallback: Hebcal"}</small>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
 
