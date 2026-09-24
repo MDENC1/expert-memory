@@ -31,6 +31,8 @@ export type CalendarDay = {
   isShabbos?: boolean;
   isRoshChodesh?: boolean;
   specialTimes?: SpecialTime[];
+  hebrewFullDate?: string;
+  shulScheduleRows?: Array<{label:string;time?:string;note?:string}>;
 };
 
 export type MonthSpecialTemplate = {
