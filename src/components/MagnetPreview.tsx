@@ -3,7 +3,12 @@ import type { CalendarDay, Notice } from "../types";
 export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:CalendarDay; notice?:Notice; shulName?:string}) {
   const prominent = day.specialTimes?.filter(item => item.importance === "prominent") ?? [];
   const parsed = new Date(`${day.date}T12:00:00`);
-  const englishDate = new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric"}).format(parsed).toUpperCase();
+  const englishDate = new Intl.DateTimeFormat("en-US",{
+    weekday:"long",
+    month:"long",
+    day:"numeric",
+    year:"numeric"
+  }).format(parsed);
   const scheduleRows=day.shulScheduleRows ?? [];
 
   return (
@@ -14,10 +19,15 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
       </div>
 
       <div className="epaper">
-        <div className="epHeader">
-          <strong>{shulName.toUpperCase()}</strong>
-          <span dir="rtl">{day.hebrewFullDate || `${day.hebrewDate} ${day.hebrewMonth}`}</span>
-          <span>{englishDate}</span>
+        <div className="epBrandHeader">
+          <div className="epLogoSlot" aria-label="Shul logo placeholder">
+            <span>LOGO</span>
+          </div>
+          <div className="epBrandText">
+            <strong className="epShulName">{shulName.toUpperCase()}</strong>
+            <div className="epEnglishDate" dir="ltr">{englishDate}</div>
+            <div className="epHebrewDate" dir="rtl" lang="he">{day.hebrewFullDate || `${day.hebrewDate} ${day.hebrewMonth}`}</div>
+          </div>
         </div>
 
         {prominent.length > 0 && (
