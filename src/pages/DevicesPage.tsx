@@ -1,27 +1,35 @@
-const devices = [
-  ["MAG-000241","Kitchen - Cohen","92%","Today 12:17 AM","Healthy"],
-  ["MAG-000242","Kitchen - Levy","78%","Today 12:18 AM","Healthy"],
-  ["MAG-000243","Household 243","61%","Yesterday 12:19 AM","Attention"],
-  ["MAG-000244","Household 244","88%","Today 12:16 AM","Healthy"],
-  ["MAG-000245","Household 245","35%","Today 12:17 AM","Low battery"]
-];
+import type { LiveDevice } from "../App";
 
-export default function DevicesPage(){
+function checkInText(value:string|null){
+  if(!value) return "Never";
+  const d=new Date(value);
+  return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(d);
+}
+
+export default function DevicesPage({devices}:{devices:LiveDevice[]}){
   return <>
     <div className="pageHeader">
       <div>
-        <span className="eyebrow">Fleet</span>
+        <span className="eyebrow">Fleet · LIVE SUPABASE</span>
         <h1>Magnets</h1>
-        <p>See device status without overwhelming the shul administrator.</p>
+        <p>These are the actual device records currently stored for this shul.</p>
       </div>
     </div>
     <div className="panel tablePanel">
       <table>
         <thead>
-          <tr><th>Device</th><th>Label</th><th>Battery</th><th>Last Check-in</th><th>Status</th></tr>
+          <tr><th>Device</th><th>Label</th><th>Battery</th><th>Last Check-in</th><th>Status</th><th>Contact</th></tr>
         </thead>
         <tbody>
-          {devices.map(d=><tr key={d[0]}>{d.map((v,i)=><td key={i}>{v}</td>)}</tr>)}
+          {devices.map(d=><tr key={d.id}>
+            <td>{d.device_code}</td>
+            <td>{d.household_label}</td>
+            <td>{d.battery_percent ?? "—"}%</td>
+            <td>{checkInText(d.last_check_in)}</td>
+            <td>{d.active ? d.status : "Inactive"}</td>
+            <td>{d.contact_name || d.contact_email || d.contact_phone || "—"}</td>
+          </tr>)}
+          {devices.length===0 && <tr><td colSpan={6}>No device records found.</td></tr>}
         </tbody>
       </table>
     </div>
