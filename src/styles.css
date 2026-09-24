@@ -621,3 +621,51 @@ body{color:#172b26}
 @media(max-width:760px){
   .selectedDayEditRow{grid-template-columns:1fr}
 }
+
+/* Calendar sidebar preview: stay inside the existing widget with no horizontal scroll */
+.calendarLayout{min-width:0}
+.calendarSide{min-width:0;max-width:100%;overflow:hidden}
+.calendarSide>.previewPanel{min-width:0;width:100%;max-width:100%}
+.fitPreviewPanel{
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  overflow:hidden!important;
+}
+.epaperFitViewport{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow:hidden!important;
+  position:relative;
+}
+.epaperFitCanvas{
+  position:absolute;
+  top:0;
+  left:0;
+  width:648px!important;
+  height:480px!important;
+  min-width:648px!important;
+  max-width:none!important;
+  aspect-ratio:auto!important;
+  transform-origin:top left;
+  margin:0!important;
+}
+
+/* Give native time controls enough room for the full time + AM/PM + clock icon */
+.selectedDayEditRow{
+  grid-template-columns:minmax(0,1fr) 150px;
+}
+.selectedDayEditRow input[type="time"]{
+  width:150px;
+  min-width:150px;
+  padding:9px 34px 9px 10px;
+  font-size:16px;
+  line-height:1.2;
+  overflow:visible;
+}
+@media(max-width:760px){
+  .selectedDayEditRow{grid-template-columns:1fr}
+  .selectedDayEditRow input[type="time"]{width:100%;min-width:0}
+}
