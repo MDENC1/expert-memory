@@ -387,8 +387,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setShowAdd(false);
   };
 
-  const saveSelectedDayTimes=async()=>{
-    if(!selectedDay||!editRows.length)return;
+  const saveSelectedDayTimes=async(rowsToSave:EditRow[]=editRows)=>{
+    if(!selectedDay||!rowsToSave.length)return;
     setSavingDay(true);
     setDaySaveMessage("");
     setError("");
@@ -404,7 +404,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       return;
     }
 
-    const payload=editRows.map((row,index)=>({
+    const payload=rowsToSave.map((row,index)=>({
       shul_id:PILOT_SHUL_ID,
       event_date:selectedDay,
       service_type:row.label,
@@ -558,6 +558,15 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                         aria-label={`${r.label} time`}
                         onFocus={e=>e.currentTarget.select()}
                         onChange={e=>setEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:e.target.value}:row))}
+                        onKeyDown={async e=>{
+                          if(e.key!=="Enter")return;
+                          e.preventDefault();
+                          const normalized=normalizeDisplayTime(e.currentTarget.value);
+                          const nextRows=editRows.map((row,index)=>index===i?{...row,timeText:normalized}:row);
+                          setEditRows(nextRows);
+                          await saveSelectedDayTimes(nextRows);
+                          e.currentTarget.blur();
+                        }}
                         onBlur={e=>{
                           const normalized=normalizeDisplayTime(e.currentTarget.value);
                           setEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:normalized}:row));
@@ -567,7 +576,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   ))}
                 </div>
                 <div className="selectedDayActions">
-                  <button className="primary" disabled={savingDay} onClick={saveSelectedDayTimes}>{savingDay?"Saving...":"Save Times for This Day Only"}</button>
+                  <button className="primary" disabled={savingDay} onClick={()=>saveSelectedDayTimes()}>{savingDay?"Saving...":"Save Times for This Day Only"}</button>
                   {selectedHasManualOverride&&<button className="secondary" disabled={savingDay} onClick={resetSelectedDayTimes}>Use Normal Rule Again</button>}
                 </div>
                 {daySaveMessage&&<div className="daySaveMessage">{daySaveMessage}</div>}
