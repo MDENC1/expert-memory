@@ -524,3 +524,43 @@ body{color:#172b26}
   font-weight:900;
   white-space:nowrap;
 }
+
+/* Final header alignment pass: title fills upper half; dates hard-pinned to opposite edges */
+.epShulName{
+  font-size:24px;
+  line-height:1;
+  font-weight:900;
+  margin:0;
+  padding:0;
+  align-self:start;
+}
+.epDateRow{
+  position:relative;
+  display:block;
+  width:100%;
+  height:12px;
+  margin:0;
+  padding:0;
+  align-self:end;
+}
+.epEnglishDate{
+  position:absolute;
+  left:0;
+  bottom:0;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+  text-align:left;
+}
+.epHebrewDate{
+  position:absolute;
+  right:0;
+  bottom:0;
+  direction:rtl;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+  text-align:right;
+}
