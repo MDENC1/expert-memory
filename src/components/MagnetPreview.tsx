@@ -4,6 +4,7 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
   const prominent = day.specialTimes?.filter(item => item.importance === "prominent") ?? [];
   const parsed = new Date(`${day.date}T12:00:00`);
   const englishDate = new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric"}).format(parsed).toUpperCase();
+  const scheduleRows=day.shulScheduleRows ?? [];
 
   return (
     <div className="panel previewPanel">
@@ -15,7 +16,8 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
       <div className="epaper">
         <div className="epHeader">
           <strong>{shulName.toUpperCase()}</strong>
-          <span>{day.hebrewDate} {day.hebrewMonth} · {englishDate}</span>
+          <span dir="rtl">{day.hebrewFullDate || `${day.hebrewDate} ${day.hebrewMonth}`}</span>
+          <span>{englishDate}</span>
         </div>
 
         {(day.holiday || day.isRoshChodesh) && (
@@ -34,11 +36,23 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
         )}
 
         <div className="epBody">
-          <div className="epTimes">
-            <div><b>SHACHARIS</b><strong>{day.shacharis || "—"}</strong></div>
-            <div><b>MINCHA</b><strong>{day.mincha || "—"}</strong></div>
-            <div><b>MAARIV</b><strong>{day.maariv || "—"}</strong></div>
-          </div>
+          {scheduleRows.length > 0 ? (
+            <div className="epScheduleRows">
+              {scheduleRows.map((row,i)=>(
+                <div className="epScheduleRow" key={`${row.label}-${i}`}>
+                  <b>{row.label}</b>
+                  <strong>{row.time || ""}</strong>
+                  {row.note && <small>{row.note}</small>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="epTimes">
+              <div><b>SHACHARIS</b><strong>{day.shacharis || "—"}</strong></div>
+              <div><b>MINCHA</b><strong>{day.mincha || "—"}</strong></div>
+              <div><b>MAARIV</b><strong>{day.maariv || "—"}</strong></div>
+            </div>
+          )}
 
           {(notice || day.event) && (
             <div className="epNotice">
