@@ -406,3 +406,63 @@ body{color:#172b26}
   margin-top:0;
   padding-bottom:1px;
 }
+
+/* Header polish: keep Hebrew pinned right, enlarge logo/title, and balance service labels with times */
+.epBrandHeader{
+  grid-template-columns:60px 1fr;
+  gap:10px;
+  align-items:stretch;
+}
+.epLogoSlot{
+  width:60px;
+  height:60px;
+  align-self:start;
+}
+.epBrandText{
+  height:60px;
+  display:grid;
+  grid-template-rows:1fr auto;
+  padding-top:0;
+}
+.epShulName{
+  align-self:start;
+  font-size:17px;
+  line-height:1.05;
+  font-weight:900;
+  padding-top:1px;
+}
+.epDateRow{
+  align-self:end;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  width:100%;
+  margin:0;
+  padding-bottom:1px;
+}
+.epEnglishDate{
+  justify-self:start;
+  text-align:left;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
+.epHebrewDate{
+  direction:rtl;
+  justify-self:stretch;
+  text-align:right;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
+.epScheduleRow b,
+.epScheduleRow strong{
+  font-size:14px;
+  line-height:1.05;
+  font-weight:900;
+}
+.epScheduleRow{
+  padding:7px 7px;
+}
