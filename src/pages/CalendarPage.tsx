@@ -54,7 +54,7 @@ type ScheduleOverride = {
 
 type EditRow = {
   label: string;
-  time24: string;
+  timeText: string;
   note: string;
 };
 
@@ -206,14 +206,22 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   };
 
   const displayTimeTo24=(value:string)=>{
-    const match=value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    const clean=value.trim().toUpperCase().replace(/\s+/g," ");
+    const match=clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
     if(!match)return "";
     let h=Number(match[1]);
-    const m=match[2];
-    const ap=match[3].toUpperCase();
+    const m=Number(match[2]);
+    if(h<1||h>12||m<0||m>59)return "";
+    const ap=match[3];
     if(ap==="PM"&&h!==12)h+=12;
     if(ap==="AM"&&h===12)h=0;
-    return `${pad(h)}:${m}`;
+    return `${pad(h)}:${pad(m)}`;
+  };
+
+  const normalizeDisplayTime=(value:string)=>{
+    const as24=displayTimeTo24(value);
+    if(!as24)return value;
+    return prettyTime(as24);
   };
 
   const timeMinutesFromIso=(value:string|undefined)=>{
@@ -315,7 +323,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     setEditRows(selectedRows.map(r=>({
       label:r.label,
-      time24:displayTimeTo24(r.time),
+      timeText:r.time,
       note:r.note||""
     })));
     setDaySaveMessage("");
@@ -370,7 +378,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       shul_id:PILOT_SHUL_ID,
       event_date:selectedDay,
       service_type:row.label,
-      service_time:row.time24||null,
+      service_time:displayTimeTo24(row.timeText)||null,
       timing_source:"fixed",
       sort_order:(index+1)*10,
       active:true,
@@ -512,9 +520,18 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                     <label className="selectedDayEditRow" key={`${r.label}-${i}`}>
                       <span><b>{r.label}</b>{r.note&&<small>{r.note}</small>}</span>
                       <input
-                        type="time"
-                        value={r.time24}
-                        onChange={e=>setEditRows(rows=>rows.map((row,index)=>index===i?{...row,time24:e.target.value}:row))}
+                        className="manualTimeInput"
+                        type="text"
+                        inputMode="text"
+                        value={r.timeText}
+                        placeholder="6:45 AM"
+                        aria-label={`${r.label} time`}
+                        onFocus={e=>e.currentTarget.select()}
+                        onChange={e=>setEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:e.target.value}:row))}
+                        onBlur={e=>{
+                          const normalized=normalizeDisplayTime(e.currentTarget.value);
+                          setEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:normalized}:row));
+                        }}
                       />
                     </label>
                   ))}
