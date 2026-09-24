@@ -20,14 +20,10 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
           <span>{englishDate}</span>
         </div>
 
-        {(day.holiday || day.isRoshChodesh) && (
-          <div className="epJewishDay">{day.holiday || "ROSH CHODESH"}</div>
-        )}
-
         {prominent.length > 0 && (
-          <div className="epKeyTimes">
+          <div className="epPriorityBox">
             {prominent.map(item => (
-              <div key={item.key} className="epKeyTime">
+              <div key={item.key}>
                 <b>{item.label.toUpperCase()}</b>
                 <strong>{item.time}</strong>
               </div>
@@ -35,33 +31,51 @@ export default function MagnetPreview({day, notice, shulName="SHUL"}:{day:Calend
           </div>
         )}
 
-        <div className="epBody">
-          {scheduleRows.length > 0 ? (
-            <div className="epScheduleRows">
-              {scheduleRows.map((row,i)=>(
-                <div className="epScheduleRow" key={`${row.label}-${i}`}>
-                  <b>{row.label}</b>
-                  <strong>{row.time || ""}</strong>
-                  {row.note && <small>{row.note}</small>}
-                </div>
-              ))}
+        <div className="epTopSplit">
+          <section className="epZmanim">
+            <div className="epSectionTitle">ZMANIM</div>
+            <div className="epUnavailable">
+              <strong>Live zmanim pending</strong>
+              <span>MyZmanim is not connected yet.</span>
             </div>
-          ) : (
-            <div className="epTimes">
-              <div><b>SHACHARIS</b><strong>{day.shacharis || "—"}</strong></div>
-              <div><b>MINCHA</b><strong>{day.mincha || "—"}</strong></div>
-              <div><b>MAARIV</b><strong>{day.maariv || "—"}</strong></div>
-            </div>
-          )}
+          </section>
 
-          {(notice || day.event) && (
+          <section className="epShul">
+            <div className="epSectionTitle">SHUL</div>
+            {day.holiday && <div className="epHolidayLabel">{day.holiday}</div>}
+
+            {scheduleRows.length > 0 ? (
+              <div className="epScheduleRows">
+                {scheduleRows.map((row,i)=>(
+                  <div className="epScheduleRow" key={`${row.label}-${i}`}>
+                    <b>{row.label}</b>
+                    <strong>{row.time || ""}</strong>
+                    {row.note && <small>{row.note}</small>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="epScheduleRows">
+                <div className="epScheduleRow"><b>Shacharis</b><strong>{day.shacharis || "—"}</strong></div>
+                <div className="epScheduleRow"><b>Mincha</b><strong>{day.mincha || "—"}</strong></div>
+                <div className="epScheduleRow"><b>Maariv</b><strong>{day.maariv || "—"}</strong></div>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="epNotices">
+          <div className="epSectionTitle">NOTICES</div>
+          {(notice || day.event) ? (
             <div className="epNotice">
               <b>{notice?.headline || day.event}</b>
               {notice?.eventTime && <strong className="epEventTime">{notice.eventTime}</strong>}
               {notice?.details && <span>{notice.details}</span>}
             </div>
+          ) : (
+            <div className="epNoNotice">No notices today.</div>
           )}
-        </div>
+        </section>
 
         <div className="epFooter">
           <span>{day.isRoshChodesh ? "Rosh Chodesh" : "Supabase schedule"}</span>
