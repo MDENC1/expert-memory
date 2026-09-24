@@ -198,7 +198,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         setZmanim({});
         setZmanimError((zmanimRes as any).__error);
       }else{
-        setZmanim(zmanimRes as ZmanimBatch);
+        const next=zmanimRes as ZmanimBatch;
+        setZmanim(prev=>({
+          plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
+          sunset:{...(prev.sunset||{}),...(next.sunset||{})}
+        }));
       }
       setLoading(false);
     }
@@ -365,6 +369,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const selectedRows=selectedDay ? rowsForDate(selectedDay) : [];
   const selectedSpecial=selectedDay ? dayMap.get(selectedDay) : undefined;
   const selectedHasManualOverride=selectedDay ? (overrideMap.get(selectedDay)?.length||0)>0 : false;
+  const multiHasManualOverride=selected.length>1 && selected.some(date=>(overrideMap.get(date)?.length||0)>0);
 
   useEffect(()=>{
     if(!selectedDay){
@@ -495,6 +500,29 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       mixed:false
     })));
     setBulkSaveMessage(`Saved for ${selected.length} selected days only. Your regular rules were not changed.`);
+    setSavingDay(false);
+  };
+
+  const resetBulkSelectedTimes=async()=>{
+    if(selected.length<=1)return;
+    setSavingDay(true);
+    setBulkSaveMessage("");
+    setError("");
+
+    const selectedSet=new Set(selected);
+    const res=await supabase.from("schedule_overrides")
+      .delete()
+      .eq("shul_id",PILOT_SHUL_ID)
+      .in("event_date",selected);
+
+    if(res.error){
+      setError(res.error.message);
+      setSavingDay(false);
+      return;
+    }
+
+    setOverrides(prev=>prev.filter(o=>!selectedSet.has(o.event_date)));
+    setBulkSaveMessage(`Manual times cleared for ${selected.length} selected days. Each date is back to whatever its normal schedule or special-day rule would have produced.`);
     setSavingDay(false);
   };
 
@@ -751,6 +779,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   <button className="primary" disabled={savingDay} onClick={()=>saveBulkSelectedTimes()}>
                     {savingDay?"Saving...":`Save Times to ${selected.length} Days`}
                   </button>
+                  {multiHasManualOverride&&(
+                    <button className="secondary" disabled={savingDay} onClick={resetBulkSelectedTimes}>
+                      Use Regular Schedule for Selected Days
+                    </button>
+                  )}
                 </div>
               )}
               {bulkSaveMessage&&<div className="daySaveMessage">{bulkSaveMessage}</div>}
