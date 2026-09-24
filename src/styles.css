@@ -466,3 +466,61 @@ body{color:#172b26}
 .epScheduleRow{
   padding:7px 7px;
 }
+
+/* Header correction: larger title in logo's upper half; dates span full remaining width */
+.epBrandHeader{
+  grid-template-columns:60px minmax(0,1fr);
+  gap:10px;
+  align-items:stretch;
+}
+.epBrandText{
+  width:100%;
+  min-width:0;
+  height:60px;
+  display:grid;
+  grid-template-rows:32px 1fr;
+  padding:0;
+}
+.epShulName{
+  align-self:start;
+  margin:0;
+  padding:0;
+  font-size:22px;
+  line-height:1.05;
+  font-weight:900;
+  letter-spacing:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.epDateRow{
+  width:100%;
+  min-width:0;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin:0;
+  padding:0 0 1px 0;
+}
+.epEnglishDate{
+  flex:0 0 auto;
+  text-align:left;
+  justify-self:auto;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
+.epHebrewDate{
+  flex:0 0 auto;
+  margin-left:auto;
+  direction:rtl;
+  text-align:right;
+  justify-self:auto;
+  width:auto;
+  font-size:10px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
