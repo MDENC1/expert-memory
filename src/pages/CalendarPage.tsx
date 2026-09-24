@@ -212,14 +212,17 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   };
 
   const specialResolvedTime=(date:string,special:SpecialDay|undefined,row:SpecialEntry)=>{
-    if(!special || !/^tishrei schedule$/i.test(special.title||"")){
-      return row.event_time?prettyTime(row.event_time):"";
-    }
     const title=row.title.trim().toLowerCase();
-    if(title.includes("plag mincha")){
+    const group=(special?.title||"").trim().toLowerCase();
+
+    // Generic Tishrei and Chol Hamoed schedules inherit the shul's
+    // weekly Plag/Sunset rules instead of preserving stale per-day math.
+    const usesWeeklyRules = group==="tishrei schedule" || group==="chol hamoed";
+
+    if(usesWeeklyRules && title.includes("plag mincha")){
       return weeklyResolvedTime(date,"plag",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
     }
-    if(title==="mincha / maariv"){
+    if(usesWeeklyRules && title==="mincha / maariv"){
       return weeklyResolvedTime(date,"sunset",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
     }
     return row.event_time?prettyTime(row.event_time):"";
