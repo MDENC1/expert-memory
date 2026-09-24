@@ -79,6 +79,46 @@ function hebrewParts(date:Date){
   };
 }
 
+function hebrewNumeral(value:number){
+  if(!Number.isFinite(value) || value<=0) return String(value);
+  const ones=["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
+  const tens=["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
+  const hundreds=["","ק","ר","ש","ת"];
+  let n=value;
+  let out="";
+  while(n>=400){out+="ת";n-=400;}
+  if(n>=100){const h=Math.floor(n/100);out+=hundreds[h]||"";n%=100;}
+  if(n===15){out+="טו";n=0;}
+  else if(n===16){out+="טז";n=0;}
+  else {
+    if(n>=10){out+=tens[Math.floor(n/10)]||"";n%=10;}
+    if(n>0) out+=ones[n]||"";
+  }
+  if(out.length===1) return out+"׳";
+  return out.slice(0,-1)+"״"+out.slice(-1);
+}
+
+function hebrewMonthHebrew(english:string){
+  const map:Record<string,string>={
+    Tishri:"תשרי",Tishrei:"תשרי",Heshvan:"חשון",Cheshvan:"חשון",Kislev:"כסלו",Tevet:"טבת",Teves:"טבת",
+    Shevat:"שבט",Adar:"אדר","Adar I":"אדר א׳","Adar II":"אדר ב׳",Nisan:"ניסן",Nissan:"ניסן",
+    Iyar:"אייר",Sivan:"סיון",Tamuz:"תמוז",Tammuz:"תמוז",Av:"אב",Elul:"אלול"
+  };
+  return map[english] || english;
+}
+
+function hebrewFullDate(date:Date){
+  const h=hebrewParts(date);
+  const day=hebrewNumeral(Number(h.day));
+  const yearNum=Number(h.year);
+  const year=hebrewNumeral(yearNum % 1000);
+  return `${day} ב${hebrewMonthHebrew(h.month)} תש${year.startsWith("תש") ? year.slice(2) : year}`.replace("תשתש","תש");
+}
+
+function isGenericSpecialTitle(title:string|null|undefined){
+  return !title || /^tishrei schedule$/i.test(title.trim());
+}
+
 function mapNotice(row:any):Notice {
   const now = localIsoDate();
   const status:Notice["status"] = row.archived_at ? "expired" : row.display_start <= now && row.display_end >= now ? "live" : row.display_start > now ? "scheduled" : "expired";
@@ -118,27 +158,31 @@ function buildLiveDay(
     englishDay:now.getDate(),
     hebrewDate:h.day,
     hebrewMonth:`${h.month} ${h.year}`,
+    hebrewFullDate:hebrewFullDate(now),
     isShabbos:dow===6,
     isRoshChodesh:h.day==="1" || h.day==="30",
-    holiday:specialDay?.title || undefined,
+    holiday:isGenericSpecialTitle(specialDay?.title) ? undefined : (specialDay?.title || undefined),
     template:specialDay?.title || (dow===6 ? "Shabbos" : "Regular")
   };
 
   if(specialDay?.replace_normal_schedule && specialEntries.length){
-    const times=(needle:string)=>specialEntries
-      .filter(e=>e.title.toLowerCase().includes(needle))
+    const rows=specialEntries.map(e=>({
+      label:e.title,
+      time:e.event_time ? prettyTime(e.event_time) : undefined,
+      note:e.note || undefined
+    }));
+    const exact=(needle:string)=>specialEntries
+      .filter(e=>e.title.trim().toLowerCase()===needle)
       .filter(e=>e.event_time)
       .map(e=>prettyTime(e.event_time))
       .filter(Boolean);
-    const shacharis=times("shacharis");
-    const mincha=times("mincha");
-    const maariv=times("maariv");
     return {
       ...base,
-      shacharis:shacharis.join(" · ") || undefined,
-      mincha:mincha.join(" · ") || undefined,
-      maariv:maariv.join(" · ") || undefined,
-      event:specialDay.title || undefined
+      shacharis:exact("shacharis").join(" · ") || undefined,
+      mincha:exact("mincha").join(" · ") || undefined,
+      maariv:exact("maariv").join(" · ") || undefined,
+      shulScheduleRows:rows,
+      event:isGenericSpecialTitle(specialDay.title) ? undefined : (specialDay.title || undefined)
     };
   }
 
