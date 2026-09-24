@@ -176,9 +176,22 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       const err=daysRes.error||entriesRes.error||overridesRes.error;
       if(err)setError(err.message);
       else{
-        setSpecialDays((daysRes.data||[]) as SpecialDay[]);
-        setSpecialEntries((entriesRes.data||[]) as SpecialEntry[]);
-        setOverrides((overridesRes.data||[]) as ScheduleOverride[]);
+        const nextDays=(daysRes.data||[]) as SpecialDay[];
+        const nextEntries=(entriesRes.data||[]) as SpecialEntry[];
+        const nextOverrides=(overridesRes.data||[]) as ScheduleOverride[];
+
+        setSpecialDays(prev=>{
+          const outside=prev.filter(row=>row.event_date<startDate||row.event_date>endDate);
+          return [...outside,...nextDays];
+        });
+        setSpecialEntries(prev=>{
+          const outside=prev.filter(row=>row.event_date<startDate||row.event_date>endDate);
+          return [...outside,...nextEntries];
+        });
+        setOverrides(prev=>{
+          const outside=prev.filter(row=>row.event_date<startDate||row.event_date>endDate);
+          return [...outside,...nextOverrides];
+        });
       }
 
       if((zmanimRes as any).__error){
@@ -410,7 +423,6 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const changeMonth=(delta:number)=>{
     setViewDate(new Date(year,month+delta,1,12));
-    setSelected([]);
     setShowAdd(false);
   };
 
@@ -591,7 +603,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         </div>
         <div className="headerActions">
           <button className="secondary" onClick={()=>changeMonth(-1)}>← Previous</button>
-          <button className="secondary" onClick={()=>setViewDate(new Date())}>This Month</button>
+          <button className="secondary" onClick={()=>{setViewDate(new Date());setShowAdd(false)}}>This Month</button>
           <button className="secondary" onClick={()=>changeMonth(1)}>Next →</button>
         </div>
       </div>
@@ -601,8 +613,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
           {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
         </button>
-        <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected` : "Click a day to see its real schedule and preview.")}</span>
+        <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected across any month` : "Click a day to see its real schedule and preview.")}</span>
         {!loading && <small>{zmanimError ? "Zmanim fallback unavailable" : "Timing fallback: Hebcal"}</small>}
+        {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
 
