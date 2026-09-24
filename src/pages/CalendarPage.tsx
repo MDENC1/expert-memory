@@ -90,6 +90,51 @@ function buildMonth(year:number,month:number):MonthCell[] {
   });
 }
 
+type YomTovInfo = {
+  key:string;
+  name:string;
+};
+
+function normalizedHebrewMonth(value:string){
+  const m=value.toLowerCase();
+  if(m.startsWith("tish"))return "tishrei";
+  if(m.startsWith("hesh")||m.startsWith("chesh"))return "cheshvan";
+  if(m.startsWith("nis")||m.startsWith("niss"))return "nissan";
+  if(m.startsWith("siv"))return "sivan";
+  return m.replace(/[^a-z]/g,"");
+}
+
+function yomTovInfoForDate(date:string):YomTovInfo|undefined {
+  const d=new Date(`${date}T12:00:00`);
+  const parts=new Intl.DateTimeFormat("en-u-ca-hebrew",{day:"numeric",month:"long"}).formatToParts(d);
+  const day=Number(parts.find(p=>p.type==="day")?.value||0);
+  const month=normalizedHebrewMonth(parts.find(p=>p.type==="month")?.value||"");
+
+  const key=`${month}-${day}`;
+  const diaspora:Record<string,YomTovInfo>={
+    "tishrei-1":{key:"rosh_hashana_1",name:"Rosh Hashana I"},
+    "tishrei-2":{key:"rosh_hashana_2",name:"Rosh Hashana II"},
+    "tishrei-10":{key:"yom_kippur",name:"Yom Kippur"},
+    "tishrei-15":{key:"sukkos_1",name:"Succos I"},
+    "tishrei-16":{key:"sukkos_2",name:"Succos II"},
+    "tishrei-22":{key:"shemini_atzeres",name:"Shemini Atzeres"},
+    "tishrei-23":{key:"simchas_torah",name:"Simchas Torah"},
+    "nissan-15":{key:"pesach_1",name:"Pesach I"},
+    "nissan-16":{key:"pesach_2",name:"Pesach II"},
+    "nissan-21":{key:"pesach_7",name:"Pesach VII"},
+    "nissan-22":{key:"pesach_8",name:"Pesach VIII"},
+    "sivan-6":{key:"shavuos_1",name:"Shavuos I"},
+    "sivan-7":{key:"shavuos_2",name:"Shavuos II"}
+  };
+  return diaspora[key];
+}
+
+function shiftIsoDate(date:string,days:number){
+  const d=new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate()+days);
+  return isoDate(d);
+}
+
 function noticeMatchesDate(notice:Notice,date:string) {
   if (date < notice.startAt || date > notice.endAt) return false;
   if (!notice.recurrence?.enabled) return true;
@@ -353,6 +398,74 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const sunset=timeMinutesFromIso(zmanim.sunset?.[date]);
     if(sunset===null)return [];
 
+    const currentYomTov=yomTovInfoForDate(date);
+    const nextDate=shiftIsoDate(date,1);
+    const nextYomTov=yomTovInfoForDate(nextDate);
+    const endThreshold=sunset+shabbosEndMinutes;
+
+    // Yom Tov transitions always take precedence over ordinary
+    // Friday candle-lighting and Shabbos-ending labels.
+    if(nextYomTov){
+      if(currentYomTov){
+        return [
+          {
+            key:"begin_prep_after",
+            label:"Begin Prep After",
+            time:minutesToDisplay(endThreshold),
+            importance:"prominent" as const
+          },
+          {
+            key:"yom_tov_candle_lighting",
+            label:"Yom Tov Candle Lighting",
+            time:minutesToDisplay(endThreshold),
+            importance:"prominent" as const
+          }
+        ];
+      }
+
+      if(nextYomTov.key==="yom_kippur"){
+        return [
+          {
+            key:"candle_lighting",
+            label:"Candle Lighting",
+            time:minutesToDisplay(sunset-18),
+            importance:"prominent" as const
+          },
+          {
+            key:"fast_begins",
+            label:"Fast Begins",
+            time:minutesToDisplay(sunset),
+            importance:"prominent" as const
+          }
+        ];
+      }
+
+      return [{
+        key:"yom_tov_candle_lighting",
+        label:"Yom Tov Candle Lighting",
+        time:minutesToDisplay(dow===6 ? endThreshold : sunset-18),
+        importance:"prominent" as const
+      }];
+    }
+
+    if(currentYomTov){
+      if(currentYomTov.key==="yom_kippur"){
+        return [{
+          key:"fast_ends",
+          label:"Fast Ends",
+          time:minutesToDisplay(endThreshold),
+          importance:"prominent" as const
+        }];
+      }
+
+      return [{
+        key:"yom_tov_ends",
+        label:"Yom Tov Ends",
+        time:minutesToDisplay(endThreshold),
+        importance:"prominent" as const
+      }];
+    }
+
     if(dow===5){
       return [{
         key:"candle_lighting",
@@ -364,13 +477,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     if(dow===6){
       const special=dayMap.get(date);
-      // A Shabbos that is also a Yom Tov needs its own Yom-Tov transition logic.
-      // Do not mislabel that case as an ordinary "Shabbos Ends".
       if(special?.replace_normal_schedule)return [];
       return [{
         key:"shabbos_ends",
         label:"Shabbos Ends",
-        time:minutesToDisplay(sunset+shabbosEndMinutes),
+        time:minutesToDisplay(endThreshold),
         importance:"prominent" as const
       }];
     }
@@ -423,6 +534,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     if(special?.replace_normal_schedule&&rows.length){
       return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
     }
+
+    // A Yom Tov replaces the normal weekday/Shabbos schedule.
+    // If no Yom Tov-specific rows are configured yet, do not fall back
+    // to an incorrect regular or Shabbos schedule.
+    if(yomTovInfoForDate(date))return [];
+
     return scheduleEntries
       .filter(r=>r.day_of_week===d.getDay())
       .map(r=>({label:r.display_name||r.service_type.replaceAll("_"," "),time:weeklyRowText(date,r),note:""}));
@@ -484,7 +601,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     hebrewMonth:selectedCell.hebrewMonth,
     isRoshChodesh:selectedCell.isRoshChodesh,
     isShabbos:selectedCell.isShabbos,
-    holiday:selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title) ? selectedSpecial.title : undefined,
+    holiday:(selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title)
+      ? selectedSpecial.title
+      : yomTovInfoForDate(selectedCell.date)?.name),
     specialTimes:keyTimesForDate(selectedCell.date),
     shulScheduleRows:selectedRows
   } : undefined;
@@ -722,7 +841,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               const keyTimes=keyTimesForDate(cell.date);
               const special=dayMap.get(cell.date);
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
-              const holiday=special?.title && !/^tishrei schedule$/i.test(special.title) ? special.title : undefined;
+              const holiday=special?.title && !/^tishrei schedule$/i.test(special.title)
+                ? special.title
+                : yomTovInfoForDate(cell.date)?.name;
               return (
                 <button
                   key={cell.date}
@@ -756,6 +877,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             <>
               <div className="panel compactPanel">
                 <div className="panelHead"><div><span className="eyebrow">Selected day</span><h2>{new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selectedCalendarDay.date}T12:00:00`))}</h2></div></div>
+                {editRows.length===0 && selectedDay && yomTovInfoForDate(selectedDay) && (
+                  <div className="yomTovScheduleMissing">
+                    <b>{yomTovInfoForDate(selectedDay)?.name} supersedes the regular schedule.</b>
+                    <span>No Yom Tov-specific davening schedule is configured for this date yet.</span>
+                  </div>
+                )}
                 <div className="selectedDayEditList">
                   {editRows.map((r,i)=>(
                     <label className="selectedDayEditRow" key={`${r.label}-${i}`}>
