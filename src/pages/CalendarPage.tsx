@@ -41,6 +41,23 @@ type ZmanimBatch = {
   sunset?: Record<string,string>;
 };
 
+type ScheduleOverride = {
+  id: string;
+  event_date: string;
+  service_type: string;
+  service_time: string | null;
+  timing_source: string;
+  sort_order: number;
+  active: boolean;
+  priority_level: number;
+};
+
+type EditRow = {
+  label: string;
+  time24: string;
+  note: string;
+};
+
 const pad = (n:number) => String(n).padStart(2,"0");
 const isoDate = (d:Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
@@ -93,6 +110,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [error,setError] = useState("");
   const [zmanim,setZmanim] = useState<ZmanimBatch>({});
   const [zmanimError,setZmanimError] = useState("");
+  const [overrides,setOverrides] = useState<ScheduleOverride[]>([]);
+  const [editRows,setEditRows] = useState<EditRow[]>([]);
+  const [savingDay,setSavingDay] = useState(false);
+  const [daySaveMessage,setDaySaveMessage] = useState("");
 
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
@@ -123,6 +144,14 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .gte("event_date",startDate)
           .lte("event_date",endDate)
           .order("event_date")
+          .order("sort_order"),
+        supabase.from("schedule_overrides")
+          .select("id,event_date,service_type,service_time,timing_source,sort_order,active,priority_level")
+          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("active",true)
+          .gte("event_date",startDate)
+          .lte("event_date",endDate)
+          .order("event_date")
           .order("sort_order")
       ]);
 
@@ -133,14 +162,15 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             .catch(err=>({__error:String(err?.message||err)}))
         : Promise.resolve({__error:"No ZIP code configured"});
 
-      const [[daysRes,entriesRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
+      const [[daysRes,entriesRes,overridesRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
       if(cancelled)return;
 
-      const err=daysRes.error||entriesRes.error;
+      const err=daysRes.error||entriesRes.error||overridesRes.error;
       if(err)setError(err.message);
       else{
         setSpecialDays((daysRes.data||[]) as SpecialDay[]);
         setSpecialEntries((entriesRes.data||[]) as SpecialEntry[]);
+        setOverrides((overridesRes.data||[]) as ScheduleOverride[]);
       }
 
       if((zmanimRes as any).__error){
@@ -162,11 +192,28 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     return m;
   },[specialEntries]);
 
+  const overrideMap=useMemo(()=>{
+    const m=new Map<string,ScheduleOverride[]>();
+    for(const o of overrides)m.set(o.event_date,[...(m.get(o.event_date)||[]),o]);
+    return m;
+  },[overrides]);
+
   const prettyTime=(value:string|null)=>{
     if(!value)return "";
     const [h,m]=value.split(":").map(Number);
     return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"})
       .format(new Date(2000,0,1,h,m));
+  };
+
+  const displayTimeTo24=(value:string)=>{
+    const match=value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if(!match)return "";
+    let h=Number(match[1]);
+    const m=match[2];
+    const ap=match[3].toUpperCase();
+    if(ap==="PM"&&h!==12)h+=12;
+    if(ap==="AM"&&h===12)h=0;
+    return `${pad(h)}:${m}`;
   };
 
   const timeMinutesFromIso=(value:string|undefined)=>{
@@ -236,6 +283,14 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const rowsForDate=(date:string)=>{
     const d=new Date(`${date}T12:00:00`);
+    const manual=overrideMap.get(date)||[];
+    if(manual.length){
+      return manual.map(r=>({
+        label:r.service_type,
+        time:r.service_time?prettyTime(r.service_time):"",
+        note:""
+      }));
+    }
     const special=dayMap.get(date);
     const rows=entriesMap.get(date)||[];
     if(special?.replace_normal_schedule&&rows.length){
@@ -250,6 +305,21 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const selectedCell=selectedDay ? monthCells.find(c=>c.date===selectedDay) : undefined;
   const selectedRows=selectedDay ? rowsForDate(selectedDay) : [];
   const selectedSpecial=selectedDay ? dayMap.get(selectedDay) : undefined;
+  const selectedHasManualOverride=selectedDay ? (overrideMap.get(selectedDay)?.length||0)>0 : false;
+
+  useEffect(()=>{
+    if(!selectedDay){
+      setEditRows([]);
+      setDaySaveMessage("");
+      return;
+    }
+    setEditRows(selectedRows.map(r=>({
+      label:r.label,
+      time24:displayTimeTo24(r.time),
+      note:r.note||""
+    })));
+    setDaySaveMessage("");
+  },[selectedDay,overrides,specialEntries,zmanim,scheduleEntries]);
 
   const selectedCalendarDay:CalendarDay|undefined = selectedCell ? {
     date:selectedCell.date,
@@ -277,6 +347,68 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     setSelected([date]);
     setShowAdd(false);
+  };
+
+  const saveSelectedDayTimes=async()=>{
+    if(!selectedDay||!editRows.length)return;
+    setSavingDay(true);
+    setDaySaveMessage("");
+    setError("");
+
+    const deleteRes=await supabase.from("schedule_overrides")
+      .delete()
+      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("event_date",selectedDay);
+
+    if(deleteRes.error){
+      setError(deleteRes.error.message);
+      setSavingDay(false);
+      return;
+    }
+
+    const payload=editRows.map((row,index)=>({
+      shul_id:PILOT_SHUL_ID,
+      event_date:selectedDay,
+      service_type:row.label,
+      service_time:row.time24||null,
+      timing_source:"fixed",
+      sort_order:(index+1)*10,
+      active:true,
+      priority_level:3
+    }));
+
+    const insertRes=await supabase.from("schedule_overrides").insert(payload).select("id,event_date,service_type,service_time,timing_source,sort_order,active,priority_level");
+    if(insertRes.error){
+      setError(insertRes.error.message);
+      setSavingDay(false);
+      return;
+    }
+
+    setOverrides(prev=>[
+      ...prev.filter(o=>o.event_date!==selectedDay),
+      ...((insertRes.data||[]) as ScheduleOverride[])
+    ]);
+    setDaySaveMessage("Saved for this date only. Your regular rules were not changed.");
+    setSavingDay(false);
+  };
+
+  const resetSelectedDayTimes=async()=>{
+    if(!selectedDay)return;
+    setSavingDay(true);
+    setDaySaveMessage("");
+    setError("");
+    const res=await supabase.from("schedule_overrides")
+      .delete()
+      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("event_date",selectedDay);
+    if(res.error){
+      setError(res.error.message);
+      setSavingDay(false);
+      return;
+    }
+    setOverrides(prev=>prev.filter(o=>o.event_date!==selectedDay));
+    setDaySaveMessage("Manual times cleared. This date is back to the normal rule.");
+    setSavingDay(false);
   };
 
   const addToSelectedDates=async()=>{
@@ -375,12 +507,26 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             <>
               <div className="panel compactPanel">
                 <div className="panelHead"><div><span className="eyebrow">Selected day</span><h2>{new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selectedCalendarDay.date}T12:00:00`))}</h2></div></div>
-                <div className="miniSchedule">
-                  {selectedRows.map((r,i)=><div key={i}><b>{r.label}</b><span>{r.time}{r.note?` - ${r.note}`:""}</span></div>)}
+                <div className="selectedDayEditList">
+                  {editRows.map((r,i)=>(
+                    <label className="selectedDayEditRow" key={`${r.label}-${i}`}>
+                      <span><b>{r.label}</b>{r.note&&<small>{r.note}</small>}</span>
+                      <input
+                        type="time"
+                        value={r.time24}
+                        onChange={e=>setEditRows(rows=>rows.map((row,index)=>index===i?{...row,time24:e.target.value}:row))}
+                      />
+                    </label>
+                  ))}
                 </div>
-                <button className="primary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
+                <div className="selectedDayActions">
+                  <button className="primary" disabled={savingDay} onClick={saveSelectedDayTimes}>{savingDay?"Saving...":"Save Times for This Day Only"}</button>
+                  {selectedHasManualOverride&&<button className="secondary" disabled={savingDay} onClick={resetSelectedDayTimes}>Use Normal Rule Again</button>}
+                </div>
+                {daySaveMessage&&<div className="daySaveMessage">{daySaveMessage}</div>}
+                <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
               </div>
-              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} />
+              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} fit />
             </>
           ) : (
             <div className="panel emptyPreview"><strong>Select one day</strong><span>Its editable schedule and magnet preview will appear here.</span></div>
