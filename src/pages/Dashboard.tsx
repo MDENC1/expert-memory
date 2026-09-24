@@ -17,10 +17,11 @@ function ruleText(r:LiveScheduleEntry){
 }
 
 export default function Dashboard({
-  days, notices, remainingPushes, onGoCalendar, onAddNotice,
+  days, previewDay, notices, remainingPushes, onGoCalendar, onAddNotice,
   shulName,activeMagnets,healthyMagnets,scheduleEntries,loading
 }: {
   days: CalendarDay[];
+  previewDay:CalendarDay;
   notices: Notice[];
   remainingPushes: number;
   onGoCalendar: () => void;
@@ -31,7 +32,6 @@ export default function Dashboard({
   scheduleEntries:LiveScheduleEntry[];
   loading:boolean;
 }) {
-  const today = days[8];
   const now=new Date();
   const dateLabel=new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}).format(now);
 
@@ -69,7 +69,7 @@ export default function Dashboard({
             {!loading && scheduleEntries.length===0 && <div><b>No weekly rules found</b><span>Nothing is currently stored in schedule_entries.</span></div>}
           </div>
         </div>
-        <MagnetPreview day={today} notice={notices.find(n => n.status === "live")} />
+        <MagnetPreview day={previewDay} notice={notices.find(n => n.status === "live")} shulName={shulName} />
       </div>
     </>
   );
