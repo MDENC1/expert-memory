@@ -294,7 +294,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       .format(new Date(2000,0,1,h,m));
   };
 
-  const floorToFive=(minutes:number)=>minutes-(minutes%5);
+  const roundMinutes=(minutes:number,to:number|null|undefined,direction:string|null|undefined)=>{
+    if(!to||to<=1)return minutes;
+    if(direction==="up")return Math.ceil(minutes/to)*to;
+    if(direction==="nearest")return Math.round(minutes/to)*to;
+    return Math.floor(minutes/to)*to;
+  };
 
   const weekStart=(date:string)=>{
     const d=new Date(`${date}T12:00:00`);
@@ -302,13 +307,26 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     return isoDate(d);
   };
 
-  const weeklyResolvedTime=(date:string,source:string|null,offset:number|null)=>{
+  const resolveRuleTime=(
+    date:string,
+    source:string|null,
+    offset:number|null,
+    useWeeklyEarliest=true,
+    roundTo:number|null=5,
+    roundDirection:string|null="down"
+  )=>{
     if(source!=="plag"&&source!=="sunset")return "";
-    const start=weekStart(date);
-    const sunday=new Date(`${start}T12:00:00`);
     const map=source==="plag" ? zmanim.plagHaMincha : zmanim.sunset;
     if(!map)return "";
 
+    if(!useWeeklyEarliest){
+      const base=timeMinutesFromIso(map[date]);
+      if(base===null)return "";
+      return minutesToDisplay(roundMinutes(base+(offset||0),roundTo,roundDirection));
+    }
+
+    const start=weekStart(date);
+    const sunday=new Date(`${start}T12:00:00`);
     const targets:number[]=[];
     for(let i=0;i<=4;i++){
       const d=new Date(sunday);
@@ -318,7 +336,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       if(base!==null)targets.push(base+(offset||0));
     }
     if(!targets.length)return "";
-    return minutesToDisplay(floorToFive(Math.min(...targets)));
+    return minutesToDisplay(roundMinutes(Math.min(...targets),roundTo,roundDirection));
   };
 
   const specialResolvedTime=(date:string,special:SpecialDay|undefined,row:SpecialEntry)=>{
@@ -330,17 +348,24 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const usesWeeklyRules = group==="tishrei schedule" || group==="chol hamoed";
 
     if(usesWeeklyRules && title.includes("plag mincha")){
-      return weeklyResolvedTime(date,"plag",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+      return resolveRuleTime(date,"plag",-10,true,5,"down") || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
     }
     if(usesWeeklyRules && title==="mincha / maariv"){
-      return weeklyResolvedTime(date,"sunset",-10) || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+      return resolveRuleTime(date,"sunset",-10,true,5,"down") || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
     }
     return row.event_time?prettyTime(row.event_time):"";
   };
 
   const weeklyRowText=(date:string,r:LiveScheduleEntry)=>{
     if(r.service_time)return prettyTime(r.service_time);
-    const resolved=weeklyResolvedTime(date,r.timing_source,r.timing_offset_minutes);
+    const resolved=resolveRuleTime(
+      date,
+      r.timing_source,
+      r.timing_offset_minutes,
+      r.use_weekly_earliest!==false,
+      r.round_to_minutes,
+      r.round_direction
+    );
     return resolved || "Timing unavailable";
   };
 
