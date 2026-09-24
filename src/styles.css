@@ -716,3 +716,17 @@ body{color:#172b26}
   font-size:12px;
   line-height:1.4;
 }
+
+/* Friday candle-lighting / Shabbos-ending times */
+.calendarKeyTime{
+  margin:5px 0 2px;
+  padding:4px 6px;
+  border:1px solid #bdd8cf;
+  border-radius:6px;
+  background:#eef8f4;
+  color:#173f36;
+  font-size:10px;
+  line-height:1.15;
+  font-weight:800;
+}
+.calendarKeyTime b{font-weight:900}
