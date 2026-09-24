@@ -346,3 +346,42 @@ body{color:#172b26}
   text-align:right;
   white-space:nowrap;
 }
+
+/* Balance header dates and align the date row with the bottom of the logo */
+.epBrandHeader{
+  align-items:stretch;
+}
+.epBrandText{
+  height:52px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:0;
+  padding-top:1px;
+}
+.epShulName{
+  font-size:13px;
+  line-height:1.05;
+}
+.epDateRow{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  align-items:end;
+  gap:10px;
+  width:100%;
+  margin-top:auto;
+  padding-bottom:1px;
+}
+.epEnglishDate,
+.epHebrewDate{
+  font-size:10px;
+  line-height:1;
+  font-weight:800;
+}
+.epEnglishDate{
+  text-align:left;
+  letter-spacing:.01em;
+}
+.epHebrewDate{
+  text-align:right;
+}
