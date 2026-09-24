@@ -116,6 +116,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [error,setError] = useState("");
   const [zmanim,setZmanim] = useState<ZmanimBatch>({});
   const [zmanimError,setZmanimError] = useState("");
+  const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
   const [overrides,setOverrides] = useState<ScheduleOverride[]>([]);
   const [editRows,setEditRows] = useState<EditRow[]>([]);
   const [savingDay,setSavingDay] = useState(false);
@@ -160,7 +161,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .gte("event_date",startDate)
           .lte("event_date",endDate)
           .order("event_date")
-          .order("sort_order")
+          .order("sort_order"),
+        supabase.from("zmanim_settings")
+          .select("fast_end_minutes")
+          .eq("shul_id",PILOT_SHUL_ID)
+          .maybeSingle()
       ]);
 
       const zmanimPromise=postalCode
@@ -170,10 +175,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             .catch(err=>({__error:String(err?.message||err)}))
         : Promise.resolve({__error:"No ZIP code configured"});
 
-      const [[daysRes,entriesRes,overridesRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
+      const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
       if(cancelled)return;
 
-      const err=daysRes.error||entriesRes.error||overridesRes.error;
+      const err=daysRes.error||entriesRes.error||overridesRes.error||zmanimSettingsRes.error;
       if(err)setError(err.message);
       else{
         const nextDays=(daysRes.data||[]) as SpecialDay[];
@@ -192,6 +197,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           const outside=prev.filter(row=>row.event_date<startDate||row.event_date>endDate);
           return [...outside,...nextOverrides];
         });
+        if(zmanimSettingsRes.data?.fast_end_minutes){
+          setShabbosEndMinutes(Number(zmanimSettingsRes.data.fast_end_minutes));
+        }
       }
 
       if((zmanimRes as any).__error){
@@ -339,6 +347,37 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     return minutesToDisplay(roundMinutes(Math.min(...targets),roundTo,roundDirection));
   };
 
+  const keyTimesForDate=(date:string)=>{
+    const d=new Date(`${date}T12:00:00`);
+    const dow=d.getDay();
+    const sunset=timeMinutesFromIso(zmanim.sunset?.[date]);
+    if(sunset===null)return [];
+
+    if(dow===5){
+      return [{
+        key:"candle_lighting",
+        label:"Candle Lighting",
+        time:minutesToDisplay(sunset-18),
+        importance:"prominent" as const
+      }];
+    }
+
+    if(dow===6){
+      const special=dayMap.get(date);
+      // A Shabbos that is also a Yom Tov needs its own Yom-Tov transition logic.
+      // Do not mislabel that case as an ordinary "Shabbos Ends".
+      if(special?.replace_normal_schedule)return [];
+      return [{
+        key:"shabbos_ends",
+        label:"Shabbos Ends",
+        time:minutesToDisplay(sunset+shabbosEndMinutes),
+        importance:"prominent" as const
+      }];
+    }
+
+    return [];
+  };
+
   const specialResolvedTime=(date:string,special:SpecialDay|undefined,row:SpecialEntry)=>{
     const title=row.title.trim().toLowerCase();
     const group=(special?.title||"").trim().toLowerCase();
@@ -446,6 +485,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     isRoshChodesh:selectedCell.isRoshChodesh,
     isShabbos:selectedCell.isShabbos,
     holiday:selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title) ? selectedSpecial.title : undefined,
+    specialTimes:keyTimesForDate(selectedCell.date),
     shulScheduleRows:selectedRows
   } : undefined;
 
@@ -679,6 +719,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             {Array.from({length:firstDow}).map((_,i)=><div key={`blank-${i}`} className="dayCell empty" />)}
             {monthCells.map(cell=>{
               const rows=rowsForDate(cell.date);
+              const keyTimes=keyTimesForDate(cell.date);
               const special=dayMap.get(cell.date);
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
               const holiday=special?.title && !/^tishrei schedule$/i.test(special.title) ? special.title : undefined;
@@ -694,6 +735,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                     {cell.isRoshChodesh && !holiday && <span className="jewishTag">Rosh Chodesh</span>}
                     {matching.length>0 && <span className="eventCount">{matching.length} scheduled</span>}
                   </div>
+                  {keyTimes.map(item=>(
+                    <div className="calendarKeyTime" key={item.key}>
+                      <b>{item.label}</b> {item.time}
+                    </div>
+                  ))}
                   <div className="times">
                     {rows.slice(0,4).map((r,i)=><span key={i}><b>{r.label}</b> {r.time}</span>)}
                     {rows.length>4 && <span>+{rows.length-4} more</span>}
