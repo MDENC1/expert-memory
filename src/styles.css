@@ -243,3 +243,12 @@ body{color:#172b26}
   font-weight:950!important;
   line-height:1.1!important;
 }
+
+.epHeader{gap:10px;align-items:center}
+.epHeader strong{margin-right:auto}
+.epHeader span{white-space:nowrap}
+.epScheduleRows{display:grid;gap:5px}
+.epScheduleRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border-bottom:2px solid #111;padding:7px 4px}
+.epScheduleRow b{font-size:13px}
+.epScheduleRow strong{font-size:17px}
+.epScheduleRow small{grid-column:1/-1;font-size:9px}
