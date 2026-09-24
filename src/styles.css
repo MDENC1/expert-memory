@@ -281,3 +281,51 @@ body{color:#172b26}
 .epNotice span{font-size:10px;margin-top:5px}
 .epNoNotice{display:grid;place-items:center;flex:1;font-size:10px;color:#333}
 .epFooter{margin-top:auto;border-top:1.5px solid #111;padding-top:4px;font-size:8px}
+
+/* Magnet header with logo + title + full English/Hebrew dates */
+.epBrandHeader{
+  display:grid;
+  grid-template-columns:52px 1fr;
+  gap:9px;
+  align-items:center;
+  border-bottom:3px solid #111;
+  padding-bottom:7px;
+}
+.epLogoSlot{
+  width:52px;
+  height:52px;
+  border:2px solid #111;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+.epLogoSlot span{
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+.epBrandText{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.epShulName{
+  display:block;
+  font-size:13px;
+  line-height:1.05;
+  letter-spacing:.01em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.epEnglishDate{
+  font-size:9px;
+  line-height:1.1;
+  text-align:left;
+}
+.epHebrewDate{
+  font-size:10px;
+  line-height:1.1;
+  text-align:right;
+  font-weight:800;
+}
