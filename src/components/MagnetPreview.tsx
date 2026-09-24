@@ -8,7 +8,7 @@ export default function MagnetPreview({day, notice, shulName="SHUL", fit=false}:
   useEffect(()=>{
     if(!fit||!fitRef.current)return;
     const node=fitRef.current;
-    const update=()=>setFitScale(Math.min(1,node.clientWidth/648));
+    const update=()=>setFitScale(Math.min(1,Math.max(0,(node.clientWidth-2)/648)));
     update();
     const ro=new ResizeObserver(update);
     ro.observe(node);
