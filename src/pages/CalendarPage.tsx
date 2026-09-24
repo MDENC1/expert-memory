@@ -206,16 +206,46 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   };
 
   const displayTimeTo24=(value:string)=>{
-    const clean=value.trim().toUpperCase().replace(/\s+/g," ");
-    const match=clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-    if(!match)return "";
-    let h=Number(match[1]);
-    const m=Number(match[2]);
-    if(h<1||h>12||m<0||m>59)return "";
-    const ap=match[3];
-    if(ap==="PM"&&h!==12)h+=12;
-    if(ap==="AM"&&h===12)h=0;
-    return `${pad(h)}:${pad(m)}`;
+    // Friendly admin input:
+    // 645pm -> 6:45 PM
+    // 6:45pm -> 6:45 PM
+    // 6 pm -> 6:00 PM
+    // 1245am -> 12:45 AM
+    const clean=value
+      .trim()
+      .toUpperCase()
+      .replace(/\./g,"")
+      .replace(/\s+/g,"");
+
+    const suffix=clean.match(/(AM|PM)$/)?.[1];
+    if(!suffix)return "";
+
+    const numeric=clean.slice(0,-suffix.length);
+    let hour:number;
+    let minute:number;
+
+    if(numeric.includes(":")){
+      const parts=numeric.split(":");
+      if(parts.length!==2||!/^\d{1,2}$/.test(parts[0])||!/^\d{1,2}$/.test(parts[1]))return "";
+      hour=Number(parts[0]);
+      minute=Number(parts[1]);
+    }else{
+      if(!/^\d{1,4}$/.test(numeric))return "";
+      if(numeric.length<=2){
+        hour=Number(numeric);
+        minute=0;
+      }else{
+        hour=Number(numeric.slice(0,-2));
+        minute=Number(numeric.slice(-2));
+      }
+    }
+
+    if(hour<1||hour>12||minute<0||minute>59)return "";
+
+    let hour24=hour;
+    if(suffix==="PM"&&hour!==12)hour24+=12;
+    if(suffix==="AM"&&hour===12)hour24=0;
+    return `${pad(hour24)}:${pad(minute)}`;
   };
 
   const normalizeDisplayTime=(value:string)=>{
