@@ -334,6 +334,7 @@ export default function App() {
             setNotices={setNotices}
             scheduleEntries={scheduleEntries}
             shulName={shulName}
+            postalCode={postalCode}
           />
         )}
 
