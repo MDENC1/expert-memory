@@ -50,6 +50,7 @@ type SpecialScheduleDay = {
   event_date:string;
   title:string|null;
   replace_normal_schedule:boolean;
+  confirmed_at:string|null;
 };
 
 type SpecialScheduleEntry = {
@@ -380,7 +381,7 @@ function buildLiveDay(
     };
   }
 
-    if(specialDay?.replace_normal_schedule && specialEntries.length){
+    if(specialDay?.replace_normal_schedule && specialDay.confirmed_at && specialEntries.length){
     const rows=specialEntries.map(e=>({
       label:e.title,
       time:e.event_time ? prettyTime(e.event_time) : undefined,
@@ -598,7 +599,7 @@ export default function App() {
 
       const [daysRes,entriesRes,overridesRes]=await Promise.all([
         supabase.from("special_schedule_days")
-          .select("event_date,replace_normal_schedule")
+          .select("event_date,replace_normal_schedule,confirmed_at")
           .eq("shul_id",currentShulId)
           .gte("event_date",today)
           .lte("event_date",endDate),
@@ -634,7 +635,7 @@ export default function App() {
       const configured=(date:string)=>{
         if((overrideCounts.get(date)||0)>0)return true;
         const day:any=dayMap.get(date);
-        if(!day)return false;
+        if(!day||!day.confirmed_at)return false;
         if(day.replace_normal_schedule===false)return true;
         return (entryCounts.get(date)||0)>0;
       };
@@ -768,7 +769,7 @@ export default function App() {
         supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
         supabase.from("schedule_entries").select("*").eq("shul_id",currentShulId).eq("active",true).order("day_of_week").order("sort_order"),
         supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
-        supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
+        supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule,confirmed_at").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
         supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
         supabase.from("schedule_overrides").select("event_date,service_type,service_time,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
         supabase.from("zmanim_settings").select("myzmanim_location_id,zman_defaults,shabbos_yom_tov_end_minutes").eq("shul_id",currentShulId).maybeSingle()
