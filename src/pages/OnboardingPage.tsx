@@ -5,6 +5,8 @@ import { supabase } from "../lib/supabase";
 type Props = {
   onCancel: () => void;
   onComplete: (shulId:string) => void;
+  mode?: "create" | "edit";
+  shulId?: string;
 };
 
 type Service = "Shacharis" | "Mincha" | "Maariv";
@@ -215,6 +217,97 @@ function normalizeFriendlyTime(value:string){
   return `${h%12||12}:${pad(m)} ${suffix}`;
 }
 
+function dbTimeToFriendly(value:string|null|undefined){
+  if(!value)return "";
+  const match=String(value).match(/^(\d{1,2}):(\d{2})/);
+  if(!match)return "";
+  const hour=Number(match[1]);
+  const minute=Number(match[2]);
+  const suffix=hour>=12?"PM":"AM";
+  return `${hour%12||12}:${pad(minute)} ${suffix}`;
+}
+
+function fallbackSourceForService(service:Service):ZmanSource{
+  if(service==="Shacharis")return "sunrise_default";
+  if(service==="Mincha")return "sunset_default";
+  return "night_gra180";
+}
+
+function rulesFromScheduleRows(rows:any[]):MinyanRule[]{
+  const groups=new Map<string,any[]>();
+
+  for(const row of rows){
+    const fallbackKey=[
+      row.service_type,
+      row.display_name,
+      row.sort_order,
+      row.timing_source,
+      row.service_time,
+      row.timing_offset_minutes,
+      row.round_to_minutes,
+      row.round_direction,
+      row.group_period,
+      row.zman_family,
+      row.use_shul_zman_default,
+      row.follows_text
+    ].join("|");
+    const key=String(row.rule_group_id||row.weekly_group||fallbackKey);
+    groups.set(key,[...(groups.get(key)||[]),row]);
+  }
+
+  const serviceOrder:Record<Service,number>={Shacharis:0,Mincha:1,Maariv:2};
+
+  return Array.from(groups.entries()).map(([groupId,group])=>{
+    const first=group[0];
+    const service=(SERVICES.includes(first.service_type as Service)?first.service_type:"Shacharis") as Service;
+    const timingSource=String(first.timing_source||"fixed");
+    const mode:RuleMode=timingSource==="fixed"
+      ?"fixed"
+      :timingSource==="follows"
+        ?"follows"
+        :timingSource==="none"
+          ?"none"
+          :"zman";
+
+    const validSource=ZMAN_OPTIONS[service].some(family=>family.methods.some(method=>method.key===timingSource));
+    const source=(validSource?timingSource:fallbackSourceForService(service)) as ZmanSource;
+    const signedOffset=Number(first.timing_offset_minutes||0);
+    const roundMode:RoundMode=!first.round_to_minutes
+      ?"exact"
+      :first.round_direction==="up"
+        ?"later"
+        :"earlier";
+
+    const family=(mode==="zman"
+      ? (first.zman_family || familyForSource(service,source).key)
+      : "") as ZmanFamilyKey|"";
+
+    return {
+      id:groupId||newId(),
+      service,
+      name:first.display_name || (mode==="none"?`NO ${service.toUpperCase()}`:service),
+      days:Array.from(new Set(group.map(row=>Number(row.day_of_week)))).sort((a,b)=>a-b),
+      mode,
+      fixedTime:mode==="fixed"?dbTimeToFriendly(first.service_time):"",
+      source,
+      offset:Math.abs(signedOffset),
+      direction:signedOffset>0?"after":"before",
+      roundMode,
+      groupPeriod:(first.group_period|| (first.use_weekly_earliest?"week_earliest":"individual")) as GroupPeriod,
+      followsText:first.follows_text||"",
+      zmanFamily:family,
+      useShulDefault:Boolean(first.use_shul_zman_default),
+      _sortOrder:Number(first.sort_order||0)
+    } as MinyanRule & {_sortOrder:number};
+  }).sort((a:any,b:any)=>{
+    const serviceDiff=serviceOrder[a.service]-serviceOrder[b.service];
+    return serviceDiff || a._sortOrder-b._sortOrder;
+  }).map((rule:any)=>{
+    const {_sortOrder,...clean}=rule;
+    return clean as MinyanRule;
+  });
+}
+
 const initialRules:MinyanRule[]=[
   {
     id:"weekday-shacharis",service:"Shacharis",name:"Weekday Shacharis",days:[1,2,3,4,5],
@@ -295,14 +388,17 @@ function sourceLabel(service:Service,source:ZmanSource){
   return `${family.label} · ${methodLabel(service,source)}`;
 }
 
-export default function OnboardingPage({onCancel,onComplete}:Props){
-  const [step,setStep]=useState<1|2>(1);
+export default function OnboardingPage({onCancel,onComplete,mode="create",shulId=""}:Props){
+  const isEdit=mode==="edit";
+  const [step,setStep]=useState<1|2>(isEdit?2:1);
   const [authMode,setAuthMode]=useState<"signup"|"signin">("signup");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [accountStatus,setAccountStatus]=useState("");
   const [busy,setBusy]=useState(false);
+  const [loadingExisting,setLoadingExisting]=useState(isEdit);
   const [error,setError]=useState("");
+  const [saveMessage,setSaveMessage]=useState("");
 
   const [name,setName]=useState("");
   const [country,setCountry]=useState("US");
@@ -318,24 +414,121 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   });
   const [locationStatus,setLocationStatus]=useState<"idle"|"checking"|"verified"|"error">("idle");
   const [verifiedLocation,setVerifiedLocation]=useState<VerifiedLocation|null>(null);
+  const [verifiedKey,setVerifiedKey]=useState("");
   const [locationError,setLocationError]=useState("");
   const [rules,setRules]=useState<MinyanRule[]>(initialRules);
 
   useEffect(()=>{
+    if(isEdit){
+      setStep(2);
+      return;
+    }
     supabase.auth.getSession().then(({data})=>{
       if(data.session){
         setAccountStatus(data.session.user.email||"Signed in");
         setStep(2);
       }
     });
-  },[]);
+  },[isEdit]);
 
   useEffect(()=>{
+    if(!isEdit||!shulId)return;
+
+    let cancelled=false;
+    async function loadExistingSetup(){
+      setLoadingExisting(true);
+      setError("");
+
+      const [shulRes,zmanimRes,scheduleRes]=await Promise.all([
+        supabase.from("shuls")
+          .select("id,name,country_code,postal_code,timezone")
+          .eq("id",shulId)
+          .maybeSingle(),
+        supabase.from("zmanim_settings")
+          .select("country_code,postal_code,myzmanim_location_id,fast_end_minutes,zman_defaults,location_metadata")
+          .eq("shul_id",shulId)
+          .maybeSingle(),
+        supabase.from("schedule_entries")
+          .select("*")
+          .eq("shul_id",shulId)
+          .eq("active",true)
+          .order("service_type")
+          .order("sort_order")
+          .order("day_of_week")
+      ]);
+
+      if(cancelled)return;
+
+      const loadError=shulRes.error||zmanimRes.error||scheduleRes.error;
+      if(loadError||!shulRes.data){
+        setError(loadError?.message||"Could not load this shul setup.");
+        setLoadingExisting(false);
+        return;
+      }
+
+      const nextCountry=String(shulRes.data.country_code||zmanimRes.data?.country_code||"US");
+      const nextZip=String(shulRes.data.postal_code||zmanimRes.data?.postal_code||"");
+      const nextTimezone=String(shulRes.data.timezone||"");
+      const nextLocationId=String(zmanimRes.data?.myzmanim_location_id||"");
+      const metadata=(zmanimRes.data?.location_metadata||{}) as any;
+      const endMinutes=Number(zmanimRes.data?.fast_end_minutes||60);
+
+      setName(String(shulRes.data.name||""));
+      setCountry(nextCountry);
+      setZip(nextZip);
+      setShabbosEndMinutes(endMinutes);
+      setShabbosEndPreset(
+        endMinutes===42?"42":endMinutes===60?"60":endMinutes===72?"72":"manual"
+      );
+      setZmanDefaults({
+        dawn:String(zmanimRes.data?.zman_defaults?.dawn||"72fix"),
+        shema:String(zmanimRes.data?.zman_defaults?.shema||"gra"),
+        midday:String(zmanimRes.data?.zman_defaults?.midday||"standard"),
+        mincha:String(zmanimRes.data?.zman_defaults?.mincha||"gra"),
+        nightfall:String(zmanimRes.data?.zman_defaults?.nightfall||"gra")
+      });
+      setRules(scheduleRes.data?.length?rulesFromScheduleRows(scheduleRes.data):initialRules);
+
+      if(nextLocationId&&nextTimezone){
+        const key=`${nextCountry}|${nextZip.trim().toUpperCase()}`;
+        setVerifiedKey(key);
+        setVerifiedLocation({
+          locationId:nextLocationId,
+          timezone:nextTimezone,
+          place:{
+            name:metadata.name||null,
+            city:metadata.city||null,
+            state:metadata.state||null,
+            country:metadata.country||null,
+            postal_code:metadata.postal_code||nextZip||null
+          }
+        });
+        setLocationStatus("verified");
+      }
+
+      setLoadingExisting(false);
+    }
+
+    void loadExistingSetup();
+    return()=>{cancelled=true;};
+  },[isEdit,shulId]);
+
+  useEffect(()=>{
+    if(loadingExisting)return;
+
+    const postal=zip.trim();
+    const currentKey=`${country}|${postal.toUpperCase()}`;
+    if(verifiedLocation&&verifiedKey===currentKey){
+      setLocationStatus("verified");
+      setLocationError("");
+      return;
+    }
+
     setVerifiedLocation(null);
+    setVerifiedKey("");
     setLocationError("");
     setLocationStatus("idle");
 
-    const postal=zip.trim();
     const minimumLength=country==="US"?5:country==="GB"?5:country==="IL"?5:3;
     if(postal.length<minimumLength)return;
 
@@ -370,6 +563,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           postal_code:data.place?.postal_code||null
         }
       });
+      setVerifiedKey(currentKey);
       setLocationStatus("verified");
       setLocationError("");
     },550);
@@ -378,7 +572,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       cancelled=true;
       window.clearTimeout(timer);
     };
-  },[country,zip]);
+  },[country,zip,loadingExisting,verifiedKey,verifiedLocation]);
 
   const coverage=useMemo(()=>{
     const matrix=DAYS.map(day=>({
@@ -450,12 +644,13 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     setRules(current=>current.filter(rule=>rule.id!==id));
   };
 
-  const createShul=async()=>{
+  const saveSetup=async()=>{
     setError("");
+    setSaveMessage("");
     if(!name.trim()){setError("Enter the shul name.");return;}
     if(!zip.trim()){setError("Enter a ZIP / postal code.");return;}
     if(locationStatus!=="verified"||!verifiedLocation){
-      setError("Wait for the location to be verified with MyZmanim before creating the shul.");
+      setError("Wait for the location to be verified with MyZmanim before saving.");
       return;
     }
     if(coverage.hasConflict){setError("A day cannot have both NO MINYAN and a configured minyan for the same tefillah.");return;}
@@ -496,13 +691,14 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
             follows_text:rule.mode==="follows"?(rule.followsText||"Follows Mincha"):"",
             group_period:rule.mode==="zman"?rule.groupPeriod:"individual",
             zman_family:rule.mode==="zman"?(family?.key||""):"",
-            use_shul_zman_default:rule.mode==="zman"&&rule.useShulDefault
+            use_shul_zman_default:rule.mode==="zman"&&rule.useShulDefault,
+            rule_group_id:rule.id
           });
         });
       });
     });
 
-    const {data,error:rpcError}=await supabase.rpc("create_shul_onboarding",{
+    const commonArgs={
       p_name:name.trim(),
       p_country_code:country,
       p_postal_code:zip.trim(),
@@ -517,22 +713,27 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       p_shabbos_end_minutes:shabbosEndMinutes,
       p_zman_defaults:zmanDefaults,
       p_schedule_rows:rows
-    });
+    };
+
+    const {data,error:rpcError}=isEdit
+      ? await supabase.rpc("update_shul_setup",{p_shul_id:shulId,...commonArgs})
+      : await supabase.rpc("create_shul_onboarding",commonArgs);
 
     if(rpcError){
       setError(rpcError.message);
       setBusy(false);return;
     }
 
-    const shulId=String(data||"");
-    if(!shulId){
-      setError("The shul was created but no shul ID was returned.");
+    const savedShulId=String(data||shulId||"");
+    if(!savedShulId){
+      setError(isEdit?"The setup could not be saved.":"The shul was created but no shul ID was returned.");
       setBusy(false);return;
     }
 
-    localStorage.setItem("magnets.currentShulId",shulId);
+    localStorage.setItem("magnets.currentShulId",savedShulId);
     setBusy(false);
-    onComplete(shulId);
+    setSaveMessage(isEdit?"Setup saved.":"");
+    onComplete(savedShulId);
   };
 
   const renderRule=(rule:MinyanRule)=>{
@@ -721,19 +922,33 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     );
   };
 
+  if(isEdit&&loadingExisting){
+    return (
+      <div className="onboardingPage">
+        <div className="panel onboardingCard">
+          <strong>Loading shul setup…</strong>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="onboardingPage">
       <div className="onboardingTop">
         <button className="secondary" onClick={onCancel}><ArrowLeft size={16}/> Back</button>
         <div>
-          <span className="eyebrow">New shul onboarding</span>
-          <h1>Get to a live dashboard in under 5 minutes</h1>
-          <p>Create the account, then describe the shul's normal weekly minyanim.</p>
+          <span className="eyebrow">{isEdit?"Shul setup":"New shul onboarding"}</span>
+          <h1>{isEdit?"Edit shul setup":"Get to a live dashboard in under 5 minutes"}</h1>
+          <p>{isEdit
+            ?"Update the shul profile, zmanim defaults, and normal weekly minyan schedule."
+            :"Create the account, then describe the shul's normal weekly minyanim."}</p>
         </div>
-        <div className="onboardingProgress">
-          <span className={step>=1?"done":""}>1 Account</span>
-          <span className={step>=2?"done":""}>2 Normal Schedule</span>
-        </div>
+        {!isEdit&&(
+          <div className="onboardingProgress">
+            <span className={step>=1?"done":""}>1 Account</span>
+            <span className={step>=2?"done":""}>2 Normal Schedule</span>
+          </div>
+        )}
       </div>
 
       {step===1 ? (
@@ -778,11 +993,11 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           <div className="panel onboardingCard setupBasicsCard">
             <div className="panelHead">
               <div>
-                <span className="eyebrow">Step 2 of 2 · normal weekly schedule</span>
-                <h2>Tell us what normally happens each week</h2>
+                <span className="eyebrow">{isEdit?"Normal weekly setup":"Step 2 of 2 · normal weekly schedule"}</span>
+                <h2>{isEdit?"Edit what normally happens each week":"Tell us what normally happens each week"}</h2>
                 <p className="helperText">Add as many minyanim as the shul has. Each minyan can use a fixed time or a zman-based rule.</p>
               </div>
-              {accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
+              {!isEdit&&accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
             </div>
 
             <div className="onboardGrid fourBasics">
@@ -939,7 +1154,9 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
                 <div className={coverage.complete?"coverageStatus complete":"coverageStatus"}>
                   <strong>{coverage.complete?"All days are covered!":"A few schedule gaps remain"}</strong>
-                  <span>{coverage.complete?"You're ready to create the shul.":"Fill every blank before continuing."}</span>
+                  <span>{coverage.complete
+                    ?(isEdit?"Everything is covered and ready to save.":"You're ready to create the shul.")
+                    :"Fill every blank before continuing."}</span>
                 </div>
 
                 <div className="coverageTable">
@@ -963,15 +1180,23 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 </div>
 
                 {error&&<div className="onboardError">{error}</div>}
+                {saveMessage&&<div className="daySaveMessage">{saveMessage}</div>}
 
                 <button
                   className="primary createShulButton"
                   disabled={busy||!coverage.complete||locationStatus!=="verified"}
-                  onClick={createShul}
+                  onClick={saveSetup}
                 >
-                  {busy?"Creating shul...":"Create Shul & Open Dashboard"}
+                  {busy
+                    ?(isEdit?"Saving changes...":"Creating shul...")
+                    :(isEdit?"Save Changes":"Create Shul & Open Dashboard")}
                 </button>
-                <button className="secondary fullWidthButton" onClick={()=>setStep(1)}>Back to Account</button>
+                <button
+                  className="secondary fullWidthButton"
+                  onClick={()=>isEdit?onCancel():setStep(1)}
+                >
+                  {isEdit?"Cancel":"Back to Account"}
+                </button>
               </div>
             </aside>
           </div>
