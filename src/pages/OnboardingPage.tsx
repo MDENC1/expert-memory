@@ -196,7 +196,7 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
-    mode:"zman",fixedTime:"",source:"sunset",offset:60,direction:"after",
+    mode:"zman",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   }
 ];
@@ -218,7 +218,7 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
   }
   return {
     id:newId(),service,name:`Maariv Minyan ${index}`,days:[],
-    mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
+    mode:"follows",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   };
 }
@@ -427,8 +427,13 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               value={rule.mode}
               onChange={e=>{
                 const mode=e.target.value as RuleMode;
+                const sourceIsValidForService=ZMAN_OPTIONS[rule.service]
+                  .some(family=>family.methods.some(method=>method.key===rule.source));
                 patchRule(rule.id,{
                   mode,
+                  source:mode==="zman" && !sourceIsValidForService
+                    ? ZMAN_OPTIONS[rule.service][0].methods[0].key
+                    : rule.source,
                   followsText:mode==="follows"?"Follows Mincha":rule.followsText
                 });
               }}
