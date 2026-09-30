@@ -61,6 +61,65 @@ type SpecialScheduleEntry = {
   sort_order:number;
 };
 
+type PreviewZmanimBatch = {
+  plagHaMincha?: Record<string,string>;
+  sunset?: Record<string,string>;
+  sunrise?: Record<string,string>;
+  latestShema?: Record<string,string>;
+  midday?: Record<string,string>;
+  candleLighting?: Record<string,string>;
+  sources?: Record<string,Record<string,string>>;
+};
+
+type ZmanDefaults = {
+  dawn:string;
+  shema:string;
+  midday:string;
+  mincha:string;
+  nightfall:string;
+};
+
+const DEFAULT_ZMAN_DEFAULTS:ZmanDefaults={
+  dawn:"72fix",
+  shema:"gra",
+  midday:"standard",
+  mincha:"gra",
+  nightfall:"gra"
+};
+
+function sourceFromShulDefault(family:string,defaults:ZmanDefaults){
+  if(family==="dawn")return defaults.dawn==="ben_ish" ? "dawn_benish" : "dawn_72fix";
+  if(family==="sunrise")return "sunrise_default";
+  if(family==="shema"){
+    if(defaults.shema==="ben_ish")return "shema_benish";
+    if(defaults.shema==="ma72")return "shema_ma72fix";
+    return "shema_gra";
+  }
+  if(family==="midday")return defaults.midday==="ben_ish" ? "midday_benish" : "midday";
+  if(family==="mincha_gedolah"){
+    if(defaults.mincha==="ben_ish")return "mincha_benish";
+    if(defaults.mincha==="ma72")return "mincha_ma72fix";
+    return "mincha_gra";
+  }
+  if(family==="mincha_ketana"){
+    if(defaults.mincha==="ben_ish")return "ketana_benish";
+    if(defaults.mincha==="ma72")return "ketana_ma72fix";
+    return "ketana_gra";
+  }
+  if(family==="plag"){
+    if(defaults.mincha==="ben_ish")return "plag_benish";
+    if(defaults.mincha==="ma72")return "plag_ma72fix";
+    return "plag_gra";
+  }
+  if(family==="sunset")return "sunset_default";
+  if(family==="nightfall"){
+    if(defaults.nightfall==="ben_ish")return "night_benish";
+    if(defaults.nightfall==="rt72")return "night_72fix";
+    return "night_gra180";
+  }
+  return "";
+}
+
 function initials(name:string){
   return name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase() || "M";
 }
@@ -84,6 +143,91 @@ function prettyIsoClock(value:string|undefined){
   const match=value.match(/T(\d{2}):(\d{2})/);
   if(!match)return "";
   return prettyTime(`${match[1]}:${match[2]}`);
+}
+
+function timeMinutesFromIso(value:string|undefined){
+  if(!value)return null;
+  const match=value.match(/T(\d{2}):(\d{2})/);
+  if(!match)return null;
+  return Number(match[1])*60+Number(match[2]);
+}
+
+function minutesToDisplay(minutes:number){
+  const normalized=((minutes%1440)+1440)%1440;
+  const h=Math.floor(normalized/60);
+  const m=normalized%60;
+  return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"})
+    .format(new Date(2000,0,1,h,m));
+}
+
+function roundMinutes(minutes:number,to:number|null|undefined,direction:string|null|undefined){
+  if(!to||to<=1)return minutes;
+  if(direction==="up")return Math.ceil(minutes/to)*to;
+  if(direction==="nearest")return Math.round(minutes/to)*to;
+  return Math.floor(minutes/to)*to;
+}
+
+function weekStart(date:string){
+  const d=new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate()-d.getDay());
+  return localIsoDate(d);
+}
+
+function resolvePreviewScheduleRuleTime(
+  date:string,
+  rule:LiveScheduleEntry,
+  schedule:LiveScheduleEntry[],
+  zmanim:PreviewZmanimBatch,
+  defaults:ZmanDefaults
+){
+  const source=(rule.use_shul_zman_default&&rule.zman_family)
+    ? sourceFromShulDefault(rule.zman_family,defaults)
+    : (rule.timing_source||"");
+
+  const map=source==="plag"
+    ? zmanim.plagHaMincha
+    : source==="sunset"
+      ? zmanim.sunset
+      : zmanim.sources?.[source];
+
+  if(!map)return "";
+
+  const period=rule.group_period || (rule.use_weekly_earliest ? "week_earliest" : "individual");
+  let candidateDates:string[]=[date];
+
+  if(period!=="individual"){
+    const groupKey=rule.rule_group_id||rule.weekly_group;
+    const matchingGroup=groupKey
+      ? schedule.filter(row=>(row.rule_group_id||row.weekly_group)===groupKey)
+      : [rule];
+    const dows=new Set(matchingGroup.map(row=>row.day_of_week));
+
+    if(period==="week_earliest"){
+      const start=weekStart(date);
+      const sunday=new Date(`${start}T12:00:00`);
+      candidateDates=Array.from({length:7},(_,i)=>{
+        const d=new Date(sunday);
+        d.setDate(sunday.getDate()+i);
+        return localIsoDate(d);
+      }).filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+    }else if(period==="month_earliest"){
+      const baseDate=new Date(`${date}T12:00:00`);
+      const y=baseDate.getFullYear();
+      const m=baseDate.getMonth();
+      const count=new Date(y,m+1,0).getDate();
+      candidateDates=Array.from({length:count},(_,i)=>localIsoDate(new Date(y,m,i+1,12)))
+        .filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+    }
+  }
+
+  const targets=candidateDates
+    .map(key=>timeMinutesFromIso(map[key]))
+    .filter((value):value is number=>value!==null)
+    .map(value=>value+(rule.timing_offset_minutes||0));
+
+  if(!targets.length)return "";
+  const raw=period==="individual" ? targets[0] : Math.min(...targets);
+  return minutesToDisplay(roundMinutes(raw,rule.round_to_minutes,rule.round_direction));
 }
 
 function hebrewParts(date:Date){
@@ -162,7 +306,9 @@ function mapNotice(row:any):Notice {
 function buildLiveDay(
   schedule:LiveScheduleEntry[],
   specialDay:SpecialScheduleDay|undefined,
-  specialEntries:SpecialScheduleEntry[]
+  specialEntries:SpecialScheduleEntry[],
+  zmanim:PreviewZmanimBatch,
+  zmanDefaults:ZmanDefaults
 ):CalendarDay {
   const now=new Date();
   const today=localIsoDate(now);
@@ -211,9 +357,7 @@ function buildLiveDay(
     if(r.service_time)return prettyTime(r.service_time);
     if(r.timing_source==="none")return "NO MINYAN";
     if(r.timing_source==="follows")return r.follows_text || "Follows Mincha";
-    const source=(r.timing_source||"rule").replaceAll("_"," ");
-    const off=r.timing_offset_minutes||0;
-    return `${source}${off ? ` ${off>0?"+":""}${off}m` : ""}`;
+    return resolvePreviewScheduleRuleTime(today,r,schedule,zmanim,zmanDefaults) || "Unavailable";
   };
 
   const rows=todayRules
@@ -250,51 +394,69 @@ export default function App() {
   const [pushesUsed,setPushesUsed] = useState(0);
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
+  const [liveZmanim,setLiveZmanim] = useState<PreviewZmanimBatch>({});
   const [liveZmanimRows,setLiveZmanimRows] = useState<Array<{label:string;time:string}>>([]);
+  const [zmanDefaults,setZmanDefaults] = useState<ZmanDefaults>(DEFAULT_ZMAN_DEFAULTS);
   const [dataVersion,setDataVersion] = useState(0);
 
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
   const healthyDevices = activeDevices.filter(d=>String(d.status).toLowerCase()==="healthy");
   const livePreviewDay=useMemo(
-    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries),zmanimRows:liveZmanimRows}),
-    [scheduleEntries,specialDay,specialEntries,liveZmanimRows]
+    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults),zmanimRows:liveZmanimRows}),
+    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,liveZmanimRows]
   );
 
   useEffect(()=>{
     let cancelled=false;
     if(!postalCode){
+      setLiveZmanim({});
       setLiveZmanimRows([]);
       return;
     }
 
-    const today=localIsoDate();
+    const now=new Date();
+    const today=localIsoDate(now);
+    const start=new Date(now.getFullYear(),now.getMonth(),1,12);
+    start.setDate(start.getDate()-6);
+    const end=new Date(now.getFullYear(),now.getMonth()+1,0,12);
+    end.setDate(end.getDate()+6);
+
     supabase.functions.invoke("myzmanim",{
       body:{
         postal_code:postalCode,
         country_code:countryCode,
         location_id:myzmanimLocationId||undefined,
-        date:today
+        start_date:localIsoDate(start),
+        end_date:localIsoDate(end)
       }
     }).then(({data,error})=>{
       if(cancelled)return;
       if(error||!data?.success){
+        setLiveZmanim({});
         setLiveZmanimRows([]);
         return;
       }
-      const times=data.times||{};
+
+      const times=(data.times||{}) as PreviewZmanimBatch;
+      setLiveZmanim(times);
+
+      const shemaSource=sourceFromShulDefault("shema",zmanDefaults);
+      const middaySource=sourceFromShulDefault("midday",zmanDefaults);
+      const plagSource=sourceFromShulDefault("plag",zmanDefaults);
+
       const rows=[
         {label:"Netz",time:prettyIsoClock(times.sunrise?.[today])},
-        {label:"Latest Shema",time:prettyIsoClock(times.latestShema?.[today])},
-        {label:"Chatzos",time:prettyIsoClock(times.midday?.[today])},
-        {label:"Plag",time:prettyIsoClock(times.plagHaMincha?.[today])},
+        {label:"Latest Shema",time:prettyIsoClock(times.sources?.[shemaSource]?.[today]||times.latestShema?.[today])},
+        {label:"Chatzos",time:prettyIsoClock(times.sources?.[middaySource]?.[today]||times.midday?.[today])},
+        {label:"Plag",time:prettyIsoClock(times.sources?.[plagSource]?.[today]||times.plagHaMincha?.[today])},
         {label:"Shkia",time:prettyIsoClock(times.sunset?.[today])}
       ].filter(row=>row.time);
       setLiveZmanimRows(rows);
     });
 
     return()=>{cancelled=true;};
-  },[postalCode,countryCode,myzmanimLocationId,currentShulId]);
+  },[postalCode,countryCode,myzmanimLocationId,currentShulId,zmanDefaults]);
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
@@ -379,7 +541,7 @@ export default function App() {
         supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
         supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
         supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
-        supabase.from("zmanim_settings").select("myzmanim_location_id").eq("shul_id",currentShulId).maybeSingle()
+        supabase.from("zmanim_settings").select("myzmanim_location_id,zman_defaults").eq("shul_id",currentShulId).maybeSingle()
       ]);
       if(cancelled) return;
       const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error || zmanimSettingsRes.error;
@@ -397,6 +559,10 @@ export default function App() {
         setPostalCode(shulRes.data?.postal_code || "");
         setCountryCode(shulRes.data?.country_code || "US");
         setMyzmanimLocationId(zmanimSettingsRes.data?.myzmanim_location_id || "");
+        setZmanDefaults({
+          ...DEFAULT_ZMAN_DEFAULTS,
+          ...((zmanimSettingsRes.data?.zman_defaults||{}) as Partial<ZmanDefaults>)
+        });
         setDevices((deviceRes.data || []) as LiveDevice[]);
         setNotices((noticeRes.data || []).map(mapNotice));
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
