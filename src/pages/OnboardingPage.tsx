@@ -21,6 +21,9 @@ type ZmanSource =
   | "night_gra180" | "night_benish" | "night_72fix";
 type RoundMode = "exact" | "earlier" | "later";
 type GroupPeriod = "individual" | "week_earliest" | "month_earliest";
+type ZmanFamilyKey = "dawn" | "sunrise" | "shema" | "midday" | "mincha_gedolah" | "mincha_ketana" | "plag" | "sunset" | "nightfall";
+type ZmanDefaultCategory = "dawn" | "shema" | "midday" | "mincha" | "nightfall";
+type ZmanDefaults = Record<ZmanDefaultCategory,string>;
 
 type MinyanRule = {
   id:string;
@@ -35,6 +38,8 @@ type MinyanRule = {
   roundMode:RoundMode;
   groupPeriod:GroupPeriod;
   followsText:string;
+  zmanFamily:ZmanFamilyKey|"";
+  useShulDefault:boolean;
 };
 
 const DAYS=[
@@ -50,61 +55,111 @@ const DAYS=[
 const SERVICES:Service[]=["Shacharis","Mincha","Maariv"];
 
 type ZmanFamilyOption = {
-  key:string;
+  key:ZmanFamilyKey;
   label:string;
-  methods:Array<{key:ZmanSource;label:string}>;
+  methods:Array<{key:ZmanSource;label:string;method:string}>;
 };
 
 const ZMAN_OPTIONS:Record<Service,ZmanFamilyOption[]>={
   Shacharis:[
     {key:"dawn",label:"Alos / Dawn",methods:[
-      {key:"dawn_72fix",label:"72-minute dawn"},
-      {key:"dawn_benish",label:"Ben Ish"}
+      {key:"dawn_72fix",label:"72 minutes before sunrise",method:"72fix"},
+      {key:"dawn_benish",label:"Ben Ish",method:"ben_ish"}
     ]},
     {key:"sunrise",label:"Sunrise / Netz",methods:[
-      {key:"sunrise_default",label:"MyZmanim standard sunrise"}
+      {key:"sunrise_default",label:"Standard sunrise",method:"standard"}
     ]},
     {key:"shema",label:"Latest Shema",methods:[
-      {key:"shema_gra",label:"GRA"},
-      {key:"shema_benish",label:"Ben Ish"},
-      {key:"shema_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
+      {key:"shema_gra",label:"GRA",method:"gra"},
+      {key:"shema_benish",label:"Ben Ish",method:"ben_ish"},
+      {key:"shema_ma72fix",label:"Magen Avraham — 72-minute day",method:"ma72"}
     ]},
     {key:"midday",label:"Chatzos / Midday",methods:[
-      {key:"midday",label:"MyZmanim standard Chatzos"},
-      {key:"midday_benish",label:"Ben Ish"}
+      {key:"midday",label:"Standard Chatzos",method:"standard"},
+      {key:"midday_benish",label:"Ben Ish",method:"ben_ish"}
     ]}
   ],
   Mincha:[
     {key:"mincha_gedolah",label:"Earliest Mincha / Mincha Gedolah",methods:[
-      {key:"mincha_gra",label:"GRA"},
-      {key:"mincha_benish",label:"Ben Ish"},
-      {key:"mincha_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
+      {key:"mincha_gra",label:"GRA",method:"gra"},
+      {key:"mincha_benish",label:"Ben Ish",method:"ben_ish"},
+      {key:"mincha_ma72fix",label:"Magen Avraham — 72-minute day",method:"ma72"}
     ]},
     {key:"mincha_ketana",label:"Mincha Ketana",methods:[
-      {key:"ketana_gra",label:"GRA"},
-      {key:"ketana_benish",label:"Ben Ish"},
-      {key:"ketana_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
+      {key:"ketana_gra",label:"GRA",method:"gra"},
+      {key:"ketana_benish",label:"Ben Ish",method:"ben_ish"},
+      {key:"ketana_ma72fix",label:"Magen Avraham — 72-minute day",method:"ma72"}
     ]},
     {key:"plag",label:"Plag HaMincha",methods:[
-      {key:"plag_gra",label:"GRA"},
-      {key:"plag_benish",label:"Ben Ish"},
-      {key:"plag_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
+      {key:"plag_gra",label:"GRA",method:"gra"},
+      {key:"plag_benish",label:"Ben Ish",method:"ben_ish"},
+      {key:"plag_ma72fix",label:"Magen Avraham — 72-minute day",method:"ma72"}
     ]},
     {key:"sunset",label:"Sunset / Shkia",methods:[
-      {key:"sunset_default",label:"MyZmanim standard Shkia"}
+      {key:"sunset_default",label:"Standard Shkia",method:"standard"}
     ]}
   ],
   Maariv:[
     {key:"nightfall",label:"Nightfall / Tzeis",methods:[
-      {key:"night_gra180",label:"GRA"},
-      {key:"night_benish",label:"Ben Ish"},
-      {key:"night_72fix",label:"Rabbeinu Tam · fixed 72 minutes after sunset"}
+      {key:"night_gra180",label:"GRA",method:"gra"},
+      {key:"night_benish",label:"Ben Ish",method:"ben_ish"},
+      {key:"night_72fix",label:"Rabbeinu Tam — 72 minutes after sunset",method:"rt72"}
     ]}
+  ]
+};
+
+const DEFAULT_CATEGORY_BY_FAMILY:Partial<Record<ZmanFamilyKey,ZmanDefaultCategory>>={
+  dawn:"dawn",
+  shema:"shema",
+  midday:"midday",
+  mincha_gedolah:"mincha",
+  mincha_ketana:"mincha",
+  plag:"mincha",
+  nightfall:"nightfall"
+};
+
+const DEFAULT_CHOICES:Record<ZmanDefaultCategory,Array<{value:string;label:string}>>={
+  dawn:[
+    {value:"72fix",label:"72 minutes before sunrise"},
+    {value:"ben_ish",label:"Ben Ish"}
+  ],
+  shema:[
+    {value:"gra",label:"GRA"},
+    {value:"ben_ish",label:"Ben Ish"},
+    {value:"ma72",label:"Magen Avraham — 72-minute day"}
+  ],
+  midday:[
+    {value:"standard",label:"Standard Chatzos"},
+    {value:"ben_ish",label:"Ben Ish"}
+  ],
+  mincha:[
+    {value:"gra",label:"GRA"},
+    {value:"ben_ish",label:"Ben Ish"},
+    {value:"ma72",label:"Magen Avraham — 72-minute day"}
+  ],
+  nightfall:[
+    {value:"gra",label:"GRA"},
+    {value:"ben_ish",label:"Ben Ish"},
+    {value:"rt72",label:"Rabbeinu Tam — 72 minutes after sunset"}
   ]
 };
 
 function familyForSource(service:Service,source:ZmanSource){
   return ZMAN_OPTIONS[service].find(f=>f.methods.some(m=>m.key===source)) || ZMAN_OPTIONS[service][0];
+}
+
+function defaultSourceForFamily(family:ZmanFamilyOption,defaults:ZmanDefaults){
+  const category=DEFAULT_CATEGORY_BY_FAMILY[family.key];
+  if(!category)return family.methods[0].key;
+  const wanted=defaults[category];
+  return family.methods.find(method=>method.method===wanted)?.key || family.methods[0].key;
+}
+
+function defaultLabelForFamily(family:ZmanFamilyOption,defaults:ZmanDefaults){
+  const category=DEFAULT_CATEGORY_BY_FAMILY[family.key];
+  if(!category)return family.methods[0].label;
+  const wanted=defaults[category];
+  return family.methods.find(method=>method.method===wanted)?.label || family.methods[0].label;
 }
 
 function methodLabel(service:Service,source:ZmanSource){
@@ -152,52 +207,52 @@ const initialRules:MinyanRule[]=[
   {
     id:"weekday-shacharis",service:"Shacharis",name:"Weekday Shacharis",days:[1,2,3,4,5],
     mode:"fixed",fixedTime:"6:45 AM",source:"sunset_default",offset:0,direction:"before",
-    roundMode:"exact",groupPeriod:"individual",followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"",useShulDefault:false
   },
   {
     id:"sunday-shacharis",service:"Shacharis",name:"Sunday Shacharis",days:[0],
     mode:"fixed",fixedTime:"9:30 AM",source:"sunset_default",offset:0,direction:"before",
-    roundMode:"exact",groupPeriod:"individual",followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"",useShulDefault:false
   },
   {
     id:"shabbos-shacharis",service:"Shacharis",name:"Shabbos Shacharis",days:[6],
     mode:"fixed",fixedTime:"9:00 AM",source:"sunset_default",offset:0,direction:"before",
-    roundMode:"exact",groupPeriod:"individual",followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"",useShulDefault:false
   },
   {
     id:"early-mincha",service:"Mincha",name:"Early Mincha",days:[0,1,2,3,4],
     mode:"zman",fixedTime:"",source:"plag_gra",offset:10,direction:"before",
-    roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
+    roundMode:"earlier",groupPeriod:"week_earliest",followsText:"",zmanFamily:"plag",useShulDefault:true
   },
   {
     id:"late-mincha",service:"Mincha",name:"Late Mincha",days:[0,1,2,3,4],
     mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
-    roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
+    roundMode:"earlier",groupPeriod:"week_earliest",followsText:"",zmanFamily:"sunset",useShulDefault:false
   },
   {
     id:"friday-mincha",service:"Mincha",name:"Friday Mincha",days:[5],
     mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
-    roundMode:"earlier",groupPeriod:"individual",followsText:""
+    roundMode:"earlier",groupPeriod:"individual",followsText:"",zmanFamily:"sunset",useShulDefault:false
   },
   {
     id:"shabbos-early-mincha",service:"Mincha",name:"Shabbos Early Mincha",days:[6],
     mode:"fixed",fixedTime:"2:15 PM",source:"sunset_default",offset:0,direction:"before",
-    roundMode:"exact",groupPeriod:"individual",followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"",useShulDefault:false
   },
   {
     id:"shabbos-late-mincha",service:"Mincha",name:"Shabbos Late Mincha",days:[6],
     mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
-    roundMode:"earlier",groupPeriod:"individual",followsText:""
+    roundMode:"earlier",groupPeriod:"individual",followsText:"",zmanFamily:"sunset",useShulDefault:false
   },
   {
     id:"weekday-maariv",service:"Maariv",name:"Weekday Maariv",days:[0,1,2,3,4,5],
     mode:"follows",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
-    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
+    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha",zmanFamily:"",useShulDefault:false
   },
   {
     id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
     mode:"zman",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
-    roundMode:"exact",groupPeriod:"individual",followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"nightfall",useShulDefault:true
   }
 ];
 
@@ -206,20 +261,20 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
     return {
       id:newId(),service,name:`Shacharis Minyan ${index}`,days:[],
       mode:"fixed",fixedTime:"7:00 AM",source:"sunset_default",offset:0,direction:"before",
-      roundMode:"exact",groupPeriod:"individual",followsText:""
+      roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"",useShulDefault:false
     };
   }
   if(service==="Mincha"){
     return {
       id:newId(),service,name:`Mincha Minyan ${index}`,days:[],
       mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
-      roundMode:"earlier",groupPeriod:"individual",followsText:""
+      roundMode:"earlier",groupPeriod:"individual",followsText:"",zmanFamily:"sunset",useShulDefault:false
     };
   }
   return {
     id:newId(),service,name:`Maariv Minyan ${index}`,days:[],
     mode:"follows",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
-    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
+    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha",zmanFamily:"",useShulDefault:false
   };
 }
 
@@ -242,6 +297,13 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   const [zip,setZip]=useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes]=useState(60);
   const [shabbosEndPreset,setShabbosEndPreset]=useState<"42"|"60"|"72"|"manual">("60");
+  const [zmanDefaults,setZmanDefaults]=useState<ZmanDefaults>({
+    dawn:"72fix",
+    shema:"gra",
+    midday:"standard",
+    mincha:"gra",
+    nightfall:"gra"
+  });
   const [rules,setRules]=useState<MinyanRule[]>(initialRules);
 
   useEffect(()=>{
@@ -342,12 +404,18 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       serviceRules.forEach((rule,index)=>{
         const fixedTime=rule.mode==="fixed" ? parseFriendlyTime(rule.fixedTime) : "";
         const signedOffset=rule.direction==="before" ? -Math.abs(rule.offset) : Math.abs(rule.offset);
+        const family=rule.mode==="zman"
+          ? (ZMAN_OPTIONS[service].find(item=>item.key===rule.zmanFamily) || familyForSource(service,rule.source))
+          : null;
+        const effectiveSource=rule.mode==="zman" && family && rule.useShulDefault
+          ? defaultSourceForFamily(family,zmanDefaults)
+          : rule.source;
         rule.days.forEach(day=>{
           rows.push({
             day_of_week:day,
             service_type:service,
             service_time:fixedTime,
-            timing_source:rule.mode==="fixed"?"fixed":rule.mode==="follows"?"follows":rule.mode==="none"?"none":rule.source,
+            timing_source:rule.mode==="fixed"?"fixed":rule.mode==="follows"?"follows":rule.mode==="none"?"none":effectiveSource,
             timing_offset_minutes:rule.mode==="zman"?signedOffset:0,
             display_name:rule.mode==="none"?`NO ${service.toUpperCase()}`:rule.name,
             sort_order:serviceBase[service]+index,
@@ -357,7 +425,9 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
             use_weekly_earliest:rule.mode==="zman"&&rule.groupPeriod==="week_earliest",
             weekly_group:rule.mode==="zman"&&rule.groupPeriod!=="individual"?`${service.toLowerCase()}-${rule.id}`:"",
             follows_text:rule.mode==="follows"?(rule.followsText||"Follows Mincha"):"",
-            group_period:rule.mode==="zman"?rule.groupPeriod:"individual"
+            group_period:rule.mode==="zman"?rule.groupPeriod:"individual",
+            zman_family:rule.mode==="zman"?(family?.key||""):"",
+            use_shul_zman_default:rule.mode==="zman"&&rule.useShulDefault
           });
         });
       });
@@ -369,6 +439,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       p_postal_code:zip.trim(),
       p_timezone:"America/New_York",
       p_shabbos_end_minutes:shabbosEndMinutes,
+      p_zman_defaults:zmanDefaults,
       p_schedule_rows:rows
     });
 
@@ -390,6 +461,8 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
   const renderRule=(rule:MinyanRule)=>{
     const canFollow=rule.service==="Maariv";
+    const currentFamily=ZMAN_OPTIONS[rule.service].find(item=>item.key===rule.zmanFamily) || familyForSource(rule.service,rule.source);
+    const hasShulDefault=Boolean(DEFAULT_CATEGORY_BY_FAMILY[currentFamily.key]);
     return (
       <div className="minyanRuleCard" key={rule.id}>
         <div className="minyanRuleHeader">
@@ -429,10 +502,17 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 const mode=e.target.value as RuleMode;
                 const sourceIsValidForService=ZMAN_OPTIONS[rule.service]
                   .some(family=>family.methods.some(method=>method.key===rule.source));
+                const firstFamily=ZMAN_OPTIONS[rule.service][0];
+                const nextFamily=sourceIsValidForService
+                  ? (ZMAN_OPTIONS[rule.service].find(family=>family.methods.some(method=>method.key===rule.source)) || firstFamily)
+                  : firstFamily;
+                const inherit=Boolean(DEFAULT_CATEGORY_BY_FAMILY[nextFamily.key]);
                 patchRule(rule.id,{
                   mode,
-                  source:mode==="zman" && !sourceIsValidForService
-                    ? ZMAN_OPTIONS[rule.service][0].methods[0].key
+                  zmanFamily:mode==="zman"?nextFamily.key:rule.zmanFamily,
+                  useShulDefault:mode==="zman"?inherit:rule.useShulDefault,
+                  source:mode==="zman"
+                    ? (inherit?defaultSourceForFamily(nextFamily,zmanDefaults):nextFamily.methods[0].key)
                     : rule.source,
                   followsText:mode==="follows"?"Follows Mincha":rule.followsText
                 });
@@ -481,10 +561,15 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               <label>
                 <span>Zman</span>
                 <select
-                  value={familyForSource(rule.service,rule.source).key}
+                  value={currentFamily.key}
                   onChange={e=>{
                     const family=ZMAN_OPTIONS[rule.service].find(item=>item.key===e.target.value)!;
-                    patchRule(rule.id,{source:family.methods[0].key});
+                    const inherit=Boolean(DEFAULT_CATEGORY_BY_FAMILY[family.key]);
+                    patchRule(rule.id,{
+                      zmanFamily:family.key,
+                      useShulDefault:inherit,
+                      source:inherit?defaultSourceForFamily(family,zmanDefaults):family.methods[0].key
+                    });
                   }}
                 >
                   {ZMAN_OPTIONS[rule.service].map(family=>(
@@ -493,12 +578,24 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 </select>
               </label>
               <label>
-                <span>Calculation / opinion</span>
+                <span>Calculation Method</span>
                 <select
-                  value={rule.source}
-                  onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}
+                  value={rule.useShulDefault&&hasShulDefault?"__default__":rule.source}
+                  onChange={e=>{
+                    if(e.target.value==="__default__"){
+                      patchRule(rule.id,{
+                        useShulDefault:true,
+                        source:defaultSourceForFamily(currentFamily,zmanDefaults)
+                      });
+                    }else{
+                      patchRule(rule.id,{useShulDefault:false,source:e.target.value as ZmanSource});
+                    }
+                  }}
                 >
-                  {familyForSource(rule.service,rule.source).methods.map(method=>(
+                  {hasShulDefault&&(
+                    <option value="__default__">Use shul default — {defaultLabelForFamily(currentFamily,zmanDefaults)}</option>
+                  )}
+                  {currentFamily.methods.map(method=>(
                     <option key={method.key} value={method.key}>{method.label}</option>
                   ))}
                 </select>
@@ -540,7 +637,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
         <div className="ruleSentence">
           {rule.mode==="fixed"&&<span>{rule.fixedTime || "Set a time"}</span>}
-          {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {sourceLabel(rule.service,rule.source)}</span>}
+          {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {currentFamily.label} · {rule.useShulDefault&&hasShulDefault?`Shul default — ${defaultLabelForFamily(currentFamily,zmanDefaults)}`:methodLabel(rule.service,rule.source)}</span>}
           {rule.mode==="follows"&&<span>{rule.followsText||"Follows Mincha"}</span>}
           {rule.mode==="none"&&<span>NO MINYAN</span>}
         </div>
@@ -653,6 +750,47 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                   )}
                 </div>
               </label>
+            </div>
+
+            <div className="zmanDefaultsBlock">
+              <div className="zmanDefaultsHead">
+                <div>
+                  <h3>Zmanim Defaults</h3>
+                  <p>Used automatically wherever that calculation applies. Any individual minyan can override the shul default below.</p>
+                </div>
+              </div>
+              <div className="zmanDefaultsGrid">
+                <label className="onboardField">
+                  <span>Alos / Dawn</span>
+                  <select value={zmanDefaults.dawn} onChange={e=>setZmanDefaults(v=>({...v,dawn:e.target.value}))}>
+                    {DEFAULT_CHOICES.dawn.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  </select>
+                </label>
+                <label className="onboardField">
+                  <span>Latest Shema</span>
+                  <select value={zmanDefaults.shema} onChange={e=>setZmanDefaults(v=>({...v,shema:e.target.value}))}>
+                    {DEFAULT_CHOICES.shema.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  </select>
+                </label>
+                <label className="onboardField">
+                  <span>Chatzos / Midday</span>
+                  <select value={zmanDefaults.midday} onChange={e=>setZmanDefaults(v=>({...v,midday:e.target.value}))}>
+                    {DEFAULT_CHOICES.midday.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  </select>
+                </label>
+                <label className="onboardField">
+                  <span>Mincha Zmanim</span>
+                  <select value={zmanDefaults.mincha} onChange={e=>setZmanDefaults(v=>({...v,mincha:e.target.value}))}>
+                    {DEFAULT_CHOICES.mincha.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  </select>
+                </label>
+                <label className="onboardField">
+                  <span>Tzeis / Maariv</span>
+                  <select value={zmanDefaults.nightfall} onChange={e=>setZmanDefaults(v=>({...v,nightfall:e.target.value}))}>
+                    {DEFAULT_CHOICES.nightfall.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
 
