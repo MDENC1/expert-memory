@@ -1268,3 +1268,91 @@ body{color:#172b26}
     width:100%;
   }
 }
+
+/* Focused Monthly Setup for missing special schedules */
+.focusedSpecialSetupList{
+  display:grid;
+  gap:14px;
+}
+.focusedSpecialSummary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  background:#f7fbf9;
+}
+.focusedSpecialSummary strong{
+  font-size:14px;
+  color:#243d36;
+}
+.focusedSpecialSummary span{
+  font-size:11px;
+  color:#5b7068;
+  text-align:right;
+}
+.focusedSpecialCard{
+  display:grid;
+  gap:12px;
+}
+.focusedSpecialRows{
+  display:grid;
+  gap:8px;
+}
+.focusedSpecialRow{
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) 150px auto;
+  gap:9px;
+  align-items:end;
+}
+.focusedSpecialRow label{
+  display:grid;
+  gap:5px;
+}
+.focusedSpecialRow label>span{
+  font-size:10px;
+  font-weight:850;
+  color:#455d55;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.focusedSpecialRow input{
+  width:100%;
+  min-width:0;
+  border:1px solid #c5d6d0;
+  border-radius:8px;
+  padding:9px 10px;
+  background:#fff;
+  color:#172b26;
+  font-weight:800;
+}
+.focusedRemoveRow{
+  min-height:38px;
+}
+.focusedSpecialActions{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  padding-top:4px;
+}
+.specialSetupComplete h2{
+  margin:5px 0 3px;
+}
+@media(max-width:720px){
+  .focusedSpecialSummary{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .focusedSpecialSummary span{
+    text-align:left;
+  }
+  .focusedSpecialRow{
+    grid-template-columns:1fr;
+  }
+  .focusedSpecialActions{
+    flex-direction:column;
+  }
+  .focusedSpecialActions button{
+    width:100%;
+  }
+}
