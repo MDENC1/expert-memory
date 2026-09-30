@@ -241,6 +241,7 @@ export default function App() {
   const [shulName,setShulName] = useState("Loading shul…");
   const [postalCode,setPostalCode] = useState("");
   const [countryCode,setCountryCode] = useState("US");
+  const [myzmanimLocationId,setMyzmanimLocationId] = useState("");
   const [devices,setDevices] = useState<LiveDevice[]>([]);
   const [scheduleEntries,setScheduleEntries] = useState<LiveScheduleEntry[]>([]);
   const [specialDay,setSpecialDay] = useState<SpecialScheduleDay|undefined>();
@@ -267,7 +268,12 @@ export default function App() {
 
     const today=localIsoDate();
     supabase.functions.invoke("myzmanim",{
-      body:{postal_code:postalCode,country_code:countryCode,date:today}
+      body:{
+        postal_code:postalCode,
+        country_code:countryCode,
+        location_id:myzmanimLocationId||undefined,
+        date:today
+      }
     }).then(({data,error})=>{
       if(cancelled)return;
       if(error||!data?.success){
@@ -286,7 +292,7 @@ export default function App() {
     });
 
     return()=>{cancelled=true;};
-  },[postalCode,countryCode,currentShulId]);
+  },[postalCode,countryCode,myzmanimLocationId,currentShulId]);
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
@@ -363,17 +369,18 @@ export default function App() {
     async function loadLiveData(){
       setLoading(true); setLoadError("");
       const today = localIsoDate();
-      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes] = await Promise.all([
+      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes,zmanimSettingsRes] = await Promise.all([
         supabase.from("shuls").select("id,name,country_code,postal_code,timezone").eq("id",currentShulId).maybeSingle(),
         supabase.from("magnets").select("*").eq("shul_id",currentShulId).order("device_code"),
         supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
         supabase.from("schedule_entries").select("*").eq("shul_id",currentShulId).eq("active",true).order("day_of_week").order("sort_order"),
         supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
         supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
-        supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order")
+        supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
+        supabase.from("zmanim_settings").select("myzmanim_location_id").eq("shul_id",currentShulId).maybeSingle()
       ]);
       if(cancelled) return;
-      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error;
+      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error || zmanimSettingsRes.error;
       if(firstError){
         setLoadError(firstError.message);
       } else if(!shulRes.data){
@@ -387,6 +394,7 @@ export default function App() {
         setShulName(shulRes.data?.name || "Shul");
         setPostalCode(shulRes.data?.postal_code || "");
         setCountryCode(shulRes.data?.country_code || "US");
+        setMyzmanimLocationId(zmanimSettingsRes.data?.myzmanim_location_id || "");
         setDevices((deviceRes.data || []) as LiveDevice[]);
         setNotices((noticeRes.data || []).map(mapNotice));
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
@@ -464,6 +472,7 @@ export default function App() {
             shulName={shulName}
             postalCode={postalCode}
             countryCode={countryCode}
+            locationId={myzmanimLocationId}
             shulId={currentShulId}
           />
         )}
