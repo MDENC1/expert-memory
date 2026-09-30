@@ -73,26 +73,27 @@ Deno.serve(async (req) => {
     const midday: Record<string, string> = {};
     const sources: Record<string, Record<string,string>> = {};
     const sourceFields: Record<string,string> = {
-      dawn_72: "Dawn72",
       dawn_72fix: "Dawn72fix",
+      dawn_benish: "DawnBenIsh72ToGra180propdn",
       sunrise_default: "SunriseDefault",
       shema_gra: "ShemaGra",
-      shema_benish_shabbos: "ShemaBenIsh72ToShabbos",
+      shema_benish: "ShemaBenIsh72ToGra180",
       shema_ma72fix: "ShemaMA72fix",
       midday: "Midday",
+      midday_benish: "MiddayBenIsh72proprsToRaful",
       mincha_gra: "MinchaGra",
+      mincha_benish: "MinchaBenIsh72ToShabbos",
       mincha_ma72fix: "MinchaMA72fix",
       ketana_gra: "KetanaGra",
+      ketana_benish: "KetanaBenIsh72ToShabbos",
       ketana_ma72fix: "KetanaMA72fix",
       plag_gra: "PlagGra",
-      plag_benish_shabbos: "PlagBenIsh72ToShabbos",
+      plag_benish: "PlagBenIsh72ToShabbos",
       plag_ma72fix: "PlagMA72fix",
       sunset_default: "SunsetDefault",
-      night_shabbos: "NightShabbos",
-      night_72fix: "Night72fix",
       night_gra180: "NightGra180",
-      night_gra225: "NightGra225",
-      night_gra240: "NightGra240"
+      night_benish: "NightBenIsh72ToGra180propdn",
+      night_72fix: "Night72fix"
     };
     for (const key of Object.keys(sourceFields)) sources[key] = {};
     let place: Record<string, unknown> | null = null;
