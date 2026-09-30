@@ -1,14 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarDay } from "../types";
-import type { HebcalSpecialEvent } from "../App";
+import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import { jewishMonthTemplates } from "../data/mock";
 import { supabase } from "../lib/supabase";
 
 type SpecialValues = Record<string,string>;
 type FastEndRule = 42 | 60 | 72;
 type FastOverride = {start?:string;end?:string};
-type FocusedScheduleRow = {label:string;time:string};
-type FocusedSpecialDate = {event:HebcalSpecialEvent};
+type FocusedScheduleRow = {
+  label:string;
+  overrideTime:string;
+  regularByDate:Record<string,string>;
+};
+type FocusedSpecialUnit = {
+  id:string;
+  label:string;
+  events:HebcalSpecialEvent[];
+  isCholHamoed:boolean;
+};
+type FocusedZmanimBatch = {
+  sunset?:Record<string,string>;
+  plagHaMincha?:Record<string,string>;
+  sources?:Record<string,Record<string,string>>;
+};
+type FocusedZmanDefaults = {
+  dawn:string;
+  shema:string;
+  midday:string;
+  mincha:string;
+  nightfall:string;
+};
 
 const fastDays = [
   {key:"gedalia",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
@@ -27,74 +48,203 @@ function formatMinutes(total:number) {
   return `${h24%12 || 12}:${String(minute).padStart(2,"0")} ${suffix}`;
 }
 
-function defaultRowsForSpecialDate(title:string):FocusedScheduleRow[] {
+function extraRowsForSpecialDate(title:string){
   const t=title.toLowerCase();
+  if(t.includes("yom kippur"))return ["Yizkor","Neilah"];
+  if(t.includes("rosh hashana"))return ["Shofar"];
+  if(t.includes("shemini"))return ["Yizkor"];
+  if(t.includes("simchat")||t.includes("simchas"))return ["Hakafos"];
+  if(t.includes("purim"))return ["Megillah"];
+  if(t.includes("selich"))return ["Selichos"];
+  return [] as string[];
+}
 
-  if(t.includes("yom kippur")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Yizkor",time:""},
-      {label:"Mincha",time:""},
-      {label:"Neilah",time:""},
-      {label:"Maariv",time:""}
-    ];
+const FOCUSED_DEFAULTS:FocusedZmanDefaults={
+  dawn:"72fix",
+  shema:"gra",
+  midday:"standard",
+  mincha:"gra",
+  nightfall:"gra"
+};
+
+function focusedSourceFromDefault(family:string,defaults:FocusedZmanDefaults){
+  if(family==="dawn")return defaults.dawn==="ben_ish" ? "dawn_benish" : "dawn_72fix";
+  if(family==="sunrise")return "sunrise_default";
+  if(family==="shema"){
+    if(defaults.shema==="ben_ish")return "shema_benish";
+    if(defaults.shema==="ma72")return "shema_ma72fix";
+    return "shema_gra";
+  }
+  if(family==="midday")return defaults.midday==="ben_ish" ? "midday_benish" : "midday";
+  if(family==="mincha_gedolah"){
+    if(defaults.mincha==="ben_ish")return "mincha_benish";
+    if(defaults.mincha==="ma72")return "mincha_ma72fix";
+    return "mincha_gra";
+  }
+  if(family==="mincha_ketana"){
+    if(defaults.mincha==="ben_ish")return "ketana_benish";
+    if(defaults.mincha==="ma72")return "ketana_ma72fix";
+    return "ketana_gra";
+  }
+  if(family==="plag"){
+    if(defaults.mincha==="ben_ish")return "plag_benish";
+    if(defaults.mincha==="ma72")return "plag_ma72fix";
+    return "plag_gra";
+  }
+  if(family==="sunset")return "sunset_default";
+  if(family==="nightfall"){
+    if(defaults.nightfall==="ben_ish")return "night_benish";
+    if(defaults.nightfall==="rt72")return "night_72fix";
+    return "night_gra180";
+  }
+  if(family==="shabbos_end")return "shabbos_end";
+  return "";
+}
+
+function focusedIsoDate(date:Date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+
+function focusedShiftDate(date:string,days:number){
+  const d=new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate()+days);
+  return focusedIsoDate(d);
+}
+
+function focusedTimeMinutes(value:string|undefined){
+  if(!value)return null;
+  const match=value.match(/T(\d{2}):(\d{2})/);
+  if(!match)return null;
+  return Number(match[1])*60+Number(match[2]);
+}
+
+function focusedMinutesTo24(minutes:number){
+  const normalized=((minutes%1440)+1440)%1440;
+  return `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`;
+}
+
+function focusedRound(minutes:number,to:number|null|undefined,direction:string|null|undefined){
+  if(!to||to<=1)return minutes;
+  if(direction==="up")return Math.ceil(minutes/to)*to;
+  if(direction==="nearest")return Math.round(minutes/to)*to;
+  return Math.floor(minutes/to)*to;
+}
+
+function focusedPretty24(value:string){
+  if(!/^\d{2}:\d{2}$/.test(value))return value;
+  const [h,m]=value.split(":").map(Number);
+  return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"})
+    .format(new Date(2000,0,1,h,m));
+}
+
+function focusedWeekStart(date:string){
+  const d=new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate()-d.getDay());
+  return focusedIsoDate(d);
+}
+
+function focusedResolveRuleTime(
+  date:string,
+  rule:LiveScheduleEntry,
+  schedule:LiveScheduleEntry[],
+  zmanim:FocusedZmanimBatch,
+  defaults:FocusedZmanDefaults,
+  shabbosEndMinutes:number
+){
+  if(rule.service_time){
+    const match=String(rule.service_time).match(/^(\d{2}):(\d{2})/);
+    return match?`${match[1]}:${match[2]}`:"";
+  }
+  if(rule.timing_source==="none"||rule.timing_source==="follows")return "";
+
+  const source=(rule.use_shul_zman_default&&rule.zman_family)
+    ? focusedSourceFromDefault(rule.zman_family,defaults)
+    : (rule.timing_source||"");
+
+  const isShabbosEnd=source==="shabbos_end";
+  const map=source==="plag"
+    ? zmanim.plagHaMincha
+    : source==="sunset"||isShabbosEnd
+      ? zmanim.sunset
+      : zmanim.sources?.[source];
+
+  if(!map)return "";
+
+  const period=rule.group_period||(rule.use_weekly_earliest?"week_earliest":"individual");
+  let candidateDates=[date];
+
+  if(period!=="individual"){
+    const groupKey=rule.rule_group_id||rule.weekly_group;
+    const matching=groupKey
+      ? schedule.filter(row=>(row.rule_group_id||row.weekly_group)===groupKey)
+      : [rule];
+    const dows=new Set(matching.map(row=>row.day_of_week));
+
+    if(period==="week_earliest"){
+      const start=focusedWeekStart(date);
+      const sunday=new Date(`${start}T12:00:00`);
+      candidateDates=Array.from({length:7},(_,i)=>{
+        const d=new Date(sunday);
+        d.setDate(sunday.getDate()+i);
+        return focusedIsoDate(d);
+      }).filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+    }else if(period==="month_earliest"){
+      const base=new Date(`${date}T12:00:00`);
+      const count=new Date(base.getFullYear(),base.getMonth()+1,0).getDate();
+      candidateDates=Array.from({length:count},(_,i)=>
+        focusedIsoDate(new Date(base.getFullYear(),base.getMonth(),i+1,12))
+      ).filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+    }
   }
 
-  if(t.includes("rosh hashana")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Shofar",time:""},
-      {label:"Mincha",time:""},
-      {label:"Maariv",time:""}
-    ];
-  }
+  const values=candidateDates
+    .map(key=>focusedTimeMinutes(map[key]))
+    .filter((value):value is number=>value!==null)
+    .map(value=>value+(isShabbosEnd?shabbosEndMinutes:0)+(rule.timing_offset_minutes||0));
 
-  if(t.includes("chol") || t.includes("hoshana")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Mincha / Maariv",time:""}
-    ];
-  }
+  if(!values.length)return "";
+  const raw=period==="individual"?values[0]:Math.min(...values);
+  return focusedMinutesTo24(focusedRound(raw,rule.round_to_minutes,rule.round_direction));
+}
 
-  if(t.includes("shemini")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Yizkor",time:""},
-      {label:"Mincha",time:""},
-      {label:"Maariv",time:""}
-    ];
-  }
+function focusedRegularRows(
+  date:string,
+  schedule:LiveScheduleEntry[],
+  zmanim:FocusedZmanimBatch,
+  defaults:FocusedZmanDefaults,
+  shabbosEndMinutes:number
+){
+  const dow=new Date(`${date}T12:00:00`).getDay();
+  const rules=schedule.filter(rule=>rule.day_of_week===dow);
+  const follows=rules.some(rule=>
+    rule.service_type.toLowerCase()==="maariv"&&rule.timing_source==="follows"
+  );
 
-  if(t.includes("simchat") || t.includes("simchas")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Hakafos",time:""},
-      {label:"Mincha",time:""},
-      {label:"Maariv",time:""}
-    ];
-  }
+  return rules
+    .filter(rule=>rule.timing_source!=="none")
+    .filter(rule=>!(rule.service_type.toLowerCase()==="maariv"&&rule.timing_source==="follows"))
+    .map(rule=>{
+      const service=rule.service_type.toLowerCase();
+      let label=rule.display_name||rule.service_type;
+      if(follows&&service==="mincha"){
+        label=label.replace(/\s*\/\s*Maariv$/i,"")+" / Maariv";
+      }
+      return {
+        label,
+        time:focusedResolveRuleTime(date,rule,schedule,zmanim,defaults,shabbosEndMinutes)
+      };
+    })
+    .filter(row=>row.label);
+}
 
-  if(t.includes("purim")){
-    return [
-      {label:"Shacharis",time:""},
-      {label:"Megillah",time:""},
-      {label:"Mincha",time:""},
-      {label:"Maariv",time:""}
-    ];
-  }
-
-  if(t.includes("selich")){
-    return [
-      {label:"Selichos",time:""},
-      {label:"Shacharis",time:""}
-    ];
-  }
-
-  return [
-    {label:"Shacharis",time:""},
-    {label:"Mincha",time:""},
-    {label:"Maariv",time:""}
-  ];
+function focusedDateRangeLabel(events:HebcalSpecialEvent[]){
+  const sorted=events.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if(sorted.length===1)return focusedDateLabel(sorted[0].date);
+  const first=new Date(`${sorted[0].date}T12:00:00`);
+  const last=new Date(`${sorted[sorted.length-1].date}T12:00:00`);
+  const firstText=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"}).format(first);
+  const lastText=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",year:"numeric"}).format(last);
+  return `${firstText}–${lastText} · ${sorted.length} dates`;
 }
 
 function focusedDateLabel(date:string){
@@ -128,11 +278,11 @@ export default function MonthlySetupPage({
   const [fastEndRule,setFastEndRule] = useState<FastEndRule>(42);
   const [status,setStatus] = useState("MyZmanim settings are current.");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
-  const [focusedMissing,setFocusedMissing] = useState<FocusedSpecialDate[]>([]);
+  const [focusedUnits,setFocusedUnits] = useState<FocusedSpecialUnit[]>([]);
   const [focusedDrafts,setFocusedDrafts] = useState<Record<string,FocusedScheduleRow[]>>({});
   const [focusedLoading,setFocusedLoading] = useState(false);
   const [focusedError,setFocusedError] = useState("");
-  const [focusedSavingDate,setFocusedSavingDate] = useState("");
+  const [focusedSavingUnit,setFocusedSavingUnit] = useState("");
 
   const [values,setValues] = useState<SpecialValues>({
     selichos:"06:00",
@@ -151,7 +301,7 @@ export default function MonthlySetupPage({
 
   useEffect(()=>{
     if(!focusGroup||!shulId){
-      setFocusedMissing([]);
+      setFocusedUnits([]);
       return;
     }
 
@@ -176,13 +326,13 @@ export default function MonthlySetupPage({
 
       if(!dates.length){
         if(!cancelled){
-          setFocusedMissing([]);
+          setFocusedUnits([]);
           setFocusedLoading(false);
         }
         return;
       }
 
-      const [daysRes,entriesRes,overridesRes]=await Promise.all([
+      const [daysRes,entriesRes,overridesRes,scheduleRes,zmanimSettingsRes,shulRes]=await Promise.all([
         supabase.from("special_schedule_days")
           .select("event_date,replace_normal_schedule,confirmed_at")
           .eq("shul_id",shulId)
@@ -196,12 +346,26 @@ export default function MonthlySetupPage({
           .select("event_date")
           .eq("shul_id",shulId)
           .eq("active",true)
-          .in("event_date",dates)
+          .in("event_date",dates),
+        supabase.from("schedule_entries")
+          .select("*")
+          .eq("shul_id",shulId)
+          .eq("active",true)
+          .order("day_of_week")
+          .order("sort_order"),
+        supabase.from("zmanim_settings")
+          .select("myzmanim_location_id,shabbos_yom_tov_end_minutes,zman_defaults")
+          .eq("shul_id",shulId)
+          .maybeSingle(),
+        supabase.from("shuls")
+          .select("country_code,postal_code")
+          .eq("id",shulId)
+          .maybeSingle()
       ]);
 
       if(cancelled)return;
 
-      const err=daysRes.error||entriesRes.error||overridesRes.error;
+      const err=daysRes.error||entriesRes.error||overridesRes.error||scheduleRes.error||zmanimSettingsRes.error||shulRes.error;
       if(err){
         setFocusedError(err.message);
         setFocusedLoading(false);
@@ -228,15 +392,136 @@ export default function MonthlySetupPage({
         return (entryCounts.get(date)||0)>0;
       };
 
-      const missing=events.filter(event=>!configured(event.date)).map(event=>({event}));
-      setFocusedMissing(missing);
-      setFocusedDrafts(current=>{
-        const next={...current};
-        for(const {event} of missing){
-          if(!next[event.date])next[event.date]=defaultRowsForSpecialDate(event.title);
+      const missingEvents=events.filter(event=>!configured(event.date));
+      if(!missingEvents.length){
+        setFocusedUnits([]);
+        setFocusedDrafts({});
+        setFocusedLoading(false);
+        return;
+      }
+
+      const schedule=(scheduleRes.data||[]) as LiveScheduleEntry[];
+      const defaults:FocusedZmanDefaults={
+        ...FOCUSED_DEFAULTS,
+        ...((zmanimSettingsRes.data?.zman_defaults||{}) as Partial<FocusedZmanDefaults>)
+      };
+      const shabbosEndMinutes=Number(zmanimSettingsRes.data?.shabbos_yom_tov_end_minutes||60);
+      const locationId=String(zmanimSettingsRes.data?.myzmanim_location_id||"");
+      const country=String(shulRes.data?.country_code||"US");
+      const postal=String(shulRes.data?.postal_code||"");
+
+      let rangeStart=focusedShiftDate(missingEvents[0].date,-6);
+      let rangeEnd=focusedShiftDate(missingEvents[missingEvents.length-1].date,6);
+
+      if(schedule.some(rule=>rule.group_period==="month_earliest")){
+        const first=new Date(`${missingEvents[0].date}T12:00:00`);
+        const last=new Date(`${missingEvents[missingEvents.length-1].date}T12:00:00`);
+        rangeStart=focusedIsoDate(new Date(first.getFullYear(),first.getMonth(),1,12));
+        rangeEnd=focusedIsoDate(new Date(last.getFullYear(),last.getMonth()+1,0,12));
+      }
+
+      const merged:FocusedZmanimBatch={sunset:{},plagHaMincha:{},sources:{}};
+      let chunkStart=rangeStart;
+
+      while(chunkStart<=rangeEnd){
+        const candidateEnd=focusedShiftDate(chunkStart,39);
+        const chunkEnd=candidateEnd<rangeEnd?candidateEnd:rangeEnd;
+
+        const {data,error}=await supabase.functions.invoke("myzmanim",{
+          body:{
+            postal_code:postal,
+            country_code:country,
+            location_id:locationId||undefined,
+            start_date:chunkStart,
+            end_date:chunkEnd
+          }
+        });
+
+        if(error||!data?.success){
+          setFocusedError(data?.error||error?.message||"Could not load regular MyZmanim times.");
+          setFocusedLoading(false);
+          return;
         }
-        return next;
-      });
+
+        const times=(data.times||{}) as FocusedZmanimBatch;
+        merged.sunset={...(merged.sunset||{}),...(times.sunset||{})};
+        merged.plagHaMincha={...(merged.plagHaMincha||{}),...(times.plagHaMincha||{})};
+        for(const [source,map] of Object.entries(times.sources||{})){
+          merged.sources={
+            ...(merged.sources||{}),
+            [source]:{
+              ...(merged.sources?.[source]||{}),
+              ...(map||{})
+            }
+          };
+        }
+
+        chunkStart=focusedShiftDate(chunkEnd,1);
+      }
+
+      if(cancelled)return;
+
+      const regularByDate=new Map<string,Array<{label:string;time:string}>>();
+      for(const event of missingEvents){
+        regularByDate.set(
+          event.date,
+          focusedRegularRows(event.date,schedule,merged,defaults,shabbosEndMinutes)
+        );
+      }
+
+      const chol=missingEvents.filter(event=>event.is_chol_hamoed);
+      const units:FocusedSpecialUnit[]=[];
+
+      if(chol.length){
+        units.push({
+          id:`chol-hamoed-${focusGroup}`,
+          label:focusGroup==="pesach"?"Chol Hamoed Pesach":"Chol Hamoed Succos",
+          events:chol,
+          isCholHamoed:true
+        });
+      }
+
+      for(const event of missingEvents.filter(event=>!event.is_chol_hamoed)){
+        units.push({
+          id:event.date,
+          label:event.title,
+          events:[event],
+          isCholHamoed:false
+        });
+      }
+
+      units.sort((a,b)=>a.events[0].date.localeCompare(b.events[0].date));
+
+      const nextDrafts:Record<string,FocusedScheduleRow[]>={};
+
+      for(const unit of units){
+        const rowMap=new Map<string,FocusedScheduleRow>();
+
+        for(const event of unit.events){
+          for(const regular of regularByDate.get(event.date)||[]){
+            const current=rowMap.get(regular.label)||{
+              label:regular.label,
+              overrideTime:"",
+              regularByDate:{}
+            };
+            current.regularByDate[event.date]=regular.time;
+            rowMap.set(regular.label,current);
+          }
+        }
+
+        if(!unit.isCholHamoed){
+          for(const extra of extraRowsForSpecialDate(unit.events[0].title)){
+            if(!rowMap.has(extra)){
+              rowMap.set(extra,{label:extra,overrideTime:"",regularByDate:{}});
+            }
+          }
+        }
+
+        nextDrafts[unit.id]=[...rowMap.values()];
+      }
+
+      setFocusedUnits(units);
+      setFocusedDrafts(nextDrafts);
       setFocusedLoading(false);
     }
 
@@ -244,67 +529,77 @@ export default function MonthlySetupPage({
     return()=>{cancelled=true;};
   },[focusGroup,shulId,specialCalendarEvents]);
 
-  const updateFocusedRow=(date:string,index:number,field:keyof FocusedScheduleRow,value:string)=>{
+  const updateFocusedRow=(unitId:string,index:number,field:"label"|"overrideTime",value:string)=>{
     setFocusedDrafts(current=>({
       ...current,
-      [date]:(current[date]||[]).map((row,i)=>i===index?{...row,[field]:value}:row)
+      [unitId]:(current[unitId]||[]).map((row,i)=>i===index?{...row,[field]:value}:row)
     }));
   };
 
-  const addFocusedRow=(date:string)=>{
+  const addFocusedRow=(unitId:string)=>{
     setFocusedDrafts(current=>({
       ...current,
-      [date]:[...(current[date]||[]),{label:"",time:""}]
+      [unitId]:[...(current[unitId]||[]),{label:"",overrideTime:"",regularByDate:{}}]
     }));
   };
 
-  const removeFocusedRow=(date:string,index:number)=>{
+  const removeFocusedRow=(unitId:string,index:number)=>{
     setFocusedDrafts(current=>({
       ...current,
-      [date]:(current[date]||[]).filter((_,i)=>i!==index)
+      [unitId]:(current[unitId]||[]).filter((_,i)=>i!==index)
     }));
   };
 
-  const confirmFocusedSchedule=async(event:HebcalSpecialEvent)=>{
-    const rows=(focusedDrafts[event.date]||[])
-      .map((row,index)=>({
-        title:row.label.trim(),
-        event_time:row.time||null,
-        approximate:false,
-        note:null,
-        sort_order:(index+1)*10
-      }))
-      .filter(row=>row.title);
+  const confirmFocusedUnit=async(unit:FocusedSpecialUnit)=>{
+    const draftRows=focusedDrafts[unit.id]||[];
 
-    if(!rows.length){
-      setFocusedError(`Add at least one schedule item for ${event.title}.`);
+    const datePayloads=unit.events.map(event=>{
+      const rows=draftRows.map((row,index)=>{
+        const time=row.overrideTime||row.regularByDate[event.date]||"";
+        return {
+          title:row.label.trim(),
+          event_time:time||null,
+          approximate:false,
+          note:null,
+          sort_order:(index+1)*10
+        };
+      }).filter(row=>row.title&&row.event_time);
+
+      return {
+        event_date:event.date,
+        title:unit.isCholHamoed?unit.label:event.title,
+        replace_normal_schedule:true,
+        rows
+      };
+    });
+
+    const missingDate=datePayloads.find(item=>!item.rows.length);
+    if(missingDate){
+      setFocusedError(`No usable times are available for ${focusedDateLabel(missingDate.event_date)}. Add an override before confirming.`);
       return;
     }
 
-    setFocusedSavingDate(event.date);
+    setFocusedSavingUnit(unit.id);
     setFocusedError("");
 
-    const {error}=await supabase.rpc("confirm_special_schedule",{
+    const {error}=await supabase.rpc("confirm_special_schedule_group",{
       p_shul_id:shulId,
-      p_event_date:event.date,
-      p_title:event.title,
-      p_rows:rows,
-      p_replace_normal_schedule:true
+      p_dates:datePayloads
     });
 
     if(error){
       setFocusedError(error.message);
-      setFocusedSavingDate("");
+      setFocusedSavingUnit("");
       return;
     }
 
-    setFocusedMissing(current=>current.filter(item=>item.event.date!==event.date));
+    setFocusedUnits(current=>current.filter(item=>item.id!==unit.id));
     setFocusedDrafts(current=>{
       const next={...current};
-      delete next[event.date];
+      delete next[unit.id];
       return next;
     });
-    setFocusedSavingDate("");
+    setFocusedSavingUnit("");
     onSpecialSchedulesChanged?.();
   };
 
@@ -352,6 +647,7 @@ export default function MonthlySetupPage({
   if(focusGroup){
     const focusEvents=specialCalendarEvents.filter(event=>event.group_key===focusGroup);
     const focusLabel=focusEvents[0]?.group_label || "Special Schedule";
+    const missingDateCount=focusedUnits.reduce((sum,unit)=>sum+unit.events.length,0);
 
     return (
       <>
@@ -359,7 +655,7 @@ export default function MonthlySetupPage({
           <div>
             <span className="eyebrow">Monthly Setup · Needs attention</span>
             <h1>{focusLabel}</h1>
-            <p>Only dates that still need a confirmed shul schedule are shown here.</p>
+            <p>Regular shul times are shown as the default. Leave an override blank to keep the regular time.</p>
           </div>
           {onClearFocus&&<button className="secondary" onClick={onClearFocus}>Show All Monthly Setup</button>}
         </div>
@@ -371,8 +667,8 @@ export default function MonthlySetupPage({
         )}
 
         {focusedLoading ? (
-          <div className="panel"><strong>Checking which special dates still need times…</strong></div>
-        ) : focusedMissing.length===0 ? (
+          <div className="panel"><strong>Loading regular shul times and checking what still needs confirmation…</strong></div>
+        ) : focusedUnits.length===0 ? (
           <div className="panel specialSetupComplete">
             <span className="eyebrow">Complete</span>
             <h2>All {focusLabel} dates are confirmed.</h2>
@@ -381,54 +677,97 @@ export default function MonthlySetupPage({
         ) : (
           <div className="focusedSpecialSetupList">
             <div className="panel focusedSpecialSummary">
-              <strong>{focusedMissing.length} date{focusedMissing.length===1?"":"s"} still need confirmation</strong>
-              <span>Enter only the shul-specific times for each date, then confirm it. Confirmed dates disappear from this list.</span>
+              <strong>{missingDateCount} date{missingDateCount===1?"":"s"} still need confirmation</strong>
+              <span>Regular times are preloaded below. Override only what is different for the special schedule.</span>
             </div>
 
-            {focusedMissing.map(({event})=>{
-              const rows=focusedDrafts[event.date]||[];
+            {focusedUnits.map(unit=>{
+              const rows=focusedDrafts[unit.id]||[];
               return (
-                <div className="panel focusedSpecialCard" key={event.date}>
+                <div className={`panel focusedSpecialCard ${unit.isCholHamoed?"cholHamoedGroup":""}`} key={unit.id}>
                   <div className="panelHead">
                     <div>
-                      <span className="eyebrow">{focusedDateLabel(event.date)}</span>
-                      <h2>{event.title}</h2>
-                      <p className="helperText">Regular weekly times will not be used for this date until a special schedule is confirmed.</p>
+                      <span className="eyebrow">{focusedDateRangeLabel(unit.events)}</span>
+                      <h2>{unit.label}</h2>
+                      <p className="helperText">
+                        {unit.isCholHamoed
+                          ?`Grouped once for all ${unit.events.length} Chol Hamoed dates. Each date keeps its own regular calculated time unless you override it here.`
+                          :"The regular schedule is the default. Add an override only where this special date is different."}
+                      </p>
                     </div>
+                    {unit.isCholHamoed&&<span className="sourceBadge">Grouped CH&quot;M</span>}
                   </div>
 
                   <div className="focusedSpecialRows">
-                    {rows.map((row,index)=>(
-                      <div className="focusedSpecialRow" key={index}>
-                        <label>
-                          <span>Schedule item</span>
-                          <input
-                            value={row.label}
-                            placeholder="Shacharis"
-                            onChange={e=>updateFocusedRow(event.date,index,"label",e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Time</span>
-                          <input
-                            type="time"
-                            value={row.time}
-                            onChange={e=>updateFocusedRow(event.date,index,"time",e.target.value)}
-                          />
-                        </label>
-                        <button className="secondary focusedRemoveRow" onClick={()=>removeFocusedRow(event.date,index)}>Remove</button>
-                      </div>
-                    ))}
+                    {rows.map((row,index)=>{
+                      const datedRegulars=unit.events
+                        .map(event=>({date:event.date,time:row.regularByDate[event.date]||""}))
+                        .filter(item=>item.time);
+                      const uniqueTimes=[...new Set(datedRegulars.map(item=>item.time))];
+
+                      return (
+                        <div className="focusedSpecialRow regularDefaultRow" key={index}>
+                          <label>
+                            <span>Schedule item</span>
+                            <input
+                              value={row.label}
+                              placeholder="Shacharis"
+                              onChange={e=>updateFocusedRow(unit.id,index,"label",e.target.value)}
+                            />
+                          </label>
+
+                          <div className="regularTimeDefault">
+                            <span>Regular schedule</span>
+                            {datedRegulars.length===0 ? (
+                              <strong>No regular time</strong>
+                            ) : uniqueTimes.length===1 ? (
+                              <>
+                                <strong>{focusedPretty24(uniqueTimes[0])}</strong>
+                                <small>{unit.events.length>1?"Applies automatically to each matching date":"Current regular time"}</small>
+                              </>
+                            ) : (
+                              <>
+                                <strong>Varies by date</strong>
+                                <div className="regularTimeDateList">
+                                  {datedRegulars.map(item=>(
+                                    <small key={item.date}>
+                                      {new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric"})
+                                        .format(new Date(`${item.date}T12:00:00`))}: {focusedPretty24(item.time)}
+                                    </small>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          <label>
+                            <span>Override</span>
+                            <input
+                              type="time"
+                              value={row.overrideTime}
+                              onChange={e=>updateFocusedRow(unit.id,index,"overrideTime",e.target.value)}
+                            />
+                            <small>{row.overrideTime?"Using override":"Blank = use regular time"}</small>
+                          </label>
+
+                          <button className="secondary focusedRemoveRow" onClick={()=>removeFocusedRow(unit.id,index)}>Remove</button>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="focusedSpecialActions">
-                    <button className="secondary" onClick={()=>addFocusedRow(event.date)}>+ Add Time</button>
+                    <button className="secondary" onClick={()=>addFocusedRow(unit.id)}>+ Add Special Time</button>
                     <button
                       className="primary"
-                      disabled={focusedSavingDate===event.date}
-                      onClick={()=>confirmFocusedSchedule(event)}
+                      disabled={focusedSavingUnit===unit.id}
+                      onClick={()=>confirmFocusedUnit(unit)}
                     >
-                      {focusedSavingDate===event.date?"Saving…":"Confirm This Date"}
+                      {focusedSavingUnit===unit.id
+                        ?"Saving…"
+                        :unit.isCholHamoed
+                          ?`Confirm All ${unit.events.length} Chol Hamoed Dates`
+                          :"Confirm This Date"}
                     </button>
                   </div>
                 </div>
