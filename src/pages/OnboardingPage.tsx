@@ -8,8 +8,10 @@ type Props = {
 };
 
 type Service = "Shacharis" | "Mincha" | "Maariv";
-type RuleMode = "fixed" | "zman" | "follows";
+type RuleMode = "fixed" | "zman" | "follows" | "none";
 type ZmanSource = "plag" | "sunset";
+type RoundMode = "exact" | "earlier" | "later";
+type GroupPeriod = "individual" | "week_earliest" | "month_earliest";
 
 type MinyanRule = {
   id:string;
@@ -21,8 +23,8 @@ type MinyanRule = {
   source:ZmanSource;
   offset:number;
   direction:"before"|"after";
-  roundToFive:boolean;
-  sameTimeAcrossDays:boolean;
+  roundMode:RoundMode;
+  groupPeriod:GroupPeriod;
   followsText:string;
 };
 
@@ -75,52 +77,52 @@ const initialRules:MinyanRule[]=[
   {
     id:"weekday-shacharis",service:"Shacharis",name:"Weekday Shacharis",days:[1,2,3,4,5],
     mode:"fixed",fixedTime:"6:45 AM",source:"sunset",offset:0,direction:"before",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"sunday-shacharis",service:"Shacharis",name:"Sunday Shacharis",days:[0],
     mode:"fixed",fixedTime:"9:30 AM",source:"sunset",offset:0,direction:"before",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"shabbos-shacharis",service:"Shacharis",name:"Shabbos Shacharis",days:[6],
     mode:"fixed",fixedTime:"9:00 AM",source:"sunset",offset:0,direction:"before",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"early-mincha",service:"Mincha",name:"Early Mincha",days:[0,1,2,3,4],
     mode:"zman",fixedTime:"",source:"plag",offset:10,direction:"before",
-    roundToFive:true,sameTimeAcrossDays:true,followsText:""
+    roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
   },
   {
     id:"late-mincha",service:"Mincha",name:"Late Mincha",days:[0,1,2,3,4],
     mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
-    roundToFive:true,sameTimeAcrossDays:true,followsText:""
+    roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
   },
   {
     id:"friday-mincha",service:"Mincha",name:"Friday Mincha",days:[5],
     mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
-    roundToFive:true,sameTimeAcrossDays:false,followsText:""
+    roundMode:"earlier",groupPeriod:"individual",followsText:""
   },
   {
     id:"shabbos-early-mincha",service:"Mincha",name:"Shabbos Early Mincha",days:[6],
     mode:"fixed",fixedTime:"2:15 PM",source:"sunset",offset:0,direction:"before",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"shabbos-late-mincha",service:"Mincha",name:"Shabbos Late Mincha",days:[6],
     mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
-    roundToFive:true,sameTimeAcrossDays:false,followsText:""
+    roundMode:"earlier",groupPeriod:"individual",followsText:""
   },
   {
     id:"weekday-maariv",service:"Maariv",name:"Weekday Maariv",days:[0,1,2,3,4,5],
     mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:"Follows Mincha"
+    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   },
   {
     id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
     mode:"zman",fixedTime:"",source:"sunset",offset:60,direction:"after",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    roundMode:"exact",groupPeriod:"individual",followsText:""
   }
 ];
 
@@ -129,20 +131,20 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
     return {
       id:newId(),service,name:`Shacharis Minyan ${index}`,days:[],
       mode:"fixed",fixedTime:"7:00 AM",source:"sunset",offset:0,direction:"before",
-      roundToFive:false,sameTimeAcrossDays:false,followsText:""
+      roundMode:"exact",groupPeriod:"individual",followsText:""
     };
   }
   if(service==="Mincha"){
     return {
       id:newId(),service,name:`Mincha Minyan ${index}`,days:[],
       mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
-      roundToFive:true,sameTimeAcrossDays:false,followsText:""
+      roundMode:"earlier",groupPeriod:"individual",followsText:""
     };
   }
   return {
     id:newId(),service,name:`Maariv Minyan ${index}`,days:[],
     mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
-    roundToFive:false,sameTimeAcrossDays:false,followsText:"Follows Mincha"
+    roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   };
 }
 
@@ -160,6 +162,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   const [error,setError]=useState("");
 
   const [name,setName]=useState("");
+  const [country,setCountry]=useState("US");
   const [zip,setZip]=useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes]=useState(60);
   const [rules,setRules]=useState<MinyanRule[]>(initialRules);
@@ -177,13 +180,16 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     const matrix=DAYS.map(day=>({
       day:day.value,
       label:day.full,
-      covered:Object.fromEntries(SERVICES.map(service=>[
-        service,
-        rules.some(rule=>rule.service===service&&rule.days.includes(day.value))
-      ])) as Record<Service,boolean>
+      status:Object.fromEntries(SERVICES.map(service=>{
+        const matching=rules.filter(rule=>rule.service===service&&rule.days.includes(day.value));
+        const minyanCount=matching.filter(rule=>rule.mode!=="none").length;
+        const noMinyan=matching.some(rule=>rule.mode==="none");
+        return [service,{minyanCount,noMinyan,covered:minyanCount>0||noMinyan,conflict:minyanCount>0&&noMinyan}];
+      })) as Record<Service,{minyanCount:number;noMinyan:boolean;covered:boolean;conflict:boolean}>
     }));
-    const count=matrix.reduce((sum,row)=>sum+SERVICES.filter(service=>row.covered[service]).length,0);
-    return {matrix,count,complete:count===21};
+    const count=matrix.reduce((sum,row)=>sum+SERVICES.filter(service=>row.status[service].covered).length,0);
+    const hasConflict=matrix.some(row=>SERVICES.some(service=>row.status[service].conflict));
+    return {matrix,count,complete:count===21&&!hasConflict,hasConflict};
   },[rules]);
 
   const invalidFixedRule=rules.find(rule=>rule.mode==="fixed"&&!parseFriendlyTime(rule.fixedTime));
@@ -243,8 +249,9 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   const createShul=async()=>{
     setError("");
     if(!name.trim()){setError("Enter the shul name.");return;}
-    if(!/^\d{5}$/.test(zip)){setError("Enter a 5-digit ZIP code.");return;}
-    if(!coverage.complete){setError("Finish the weekly coverage first. Every day needs Shacharis, Mincha, and Maariv.");return;}
+    if(!zip.trim()){setError("Enter a ZIP / postal code.");return;}
+    if(coverage.hasConflict){setError("A day cannot have both NO MINYAN and a configured minyan for the same tefillah.");return;}
+    if(!coverage.complete){setError("Finish the weekly coverage first. Each day needs either a minyan or NO MINYAN for Shacharis, Mincha, and Maariv.");return;}
     if(emptyDayRule){setError(`${emptyDayRule.name} does not apply to any day. Select a day or delete that minyan.`);return;}
     if(invalidFixedRule){setError(`Enter a valid time for ${invalidFixedRule.name}.`);return;}
 
@@ -263,16 +270,17 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
             day_of_week:day,
             service_type:service,
             service_time:fixedTime,
-            timing_source:rule.mode==="fixed"?"fixed":rule.mode==="follows"?"follows":rule.source,
+            timing_source:rule.mode==="fixed"?"fixed":rule.mode==="follows"?"follows":rule.mode==="none"?"none":rule.source,
             timing_offset_minutes:rule.mode==="zman"?signedOffset:0,
-            display_name:rule.name,
+            display_name:rule.mode==="none"?`NO ${service.toUpperCase()}`:rule.name,
             sort_order:serviceBase[service]+index,
             active:true,
-            round_to_minutes:rule.mode==="zman"&&rule.roundToFive?5:null,
-            round_direction:rule.mode==="zman"&&rule.roundToFive?"down":null,
-            use_weekly_earliest:rule.mode==="zman"?rule.sameTimeAcrossDays:false,
-            weekly_group:rule.mode==="zman"&&rule.sameTimeAcrossDays?`${service.toLowerCase()}-${rule.id}`:"",
-            follows_text:rule.mode==="follows"?(rule.followsText||"Follows Mincha"):""
+            round_to_minutes:rule.mode==="zman"&&rule.roundMode!=="exact"?5:null,
+            round_direction:rule.mode==="zman"&&rule.roundMode==="earlier"?"down":rule.mode==="zman"&&rule.roundMode==="later"?"up":null,
+            use_weekly_earliest:rule.mode==="zman"&&rule.groupPeriod==="week_earliest",
+            weekly_group:rule.mode==="zman"&&rule.groupPeriod!=="individual"?`${service.toLowerCase()}-${rule.id}`:"",
+            follows_text:rule.mode==="follows"?(rule.followsText||"Follows Mincha"):"",
+            group_period:rule.mode==="zman"?rule.groupPeriod:"individual"
           });
         });
       });
@@ -280,7 +288,8 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
     const {data,error:rpcError}=await supabase.rpc("create_shul_onboarding",{
       p_name:name.trim(),
-      p_postal_code:zip,
+      p_country_code:country,
+      p_postal_code:zip.trim(),
       p_timezone:"America/New_York",
       p_shabbos_end_minutes:shabbosEndMinutes,
       p_schedule_rows:rows
@@ -350,6 +359,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               <option value="fixed">Set time</option>
               <option value="zman">Based on a zman</option>
               {canFollow&&<option value="follows">Follows Mincha</option>}
+              <option value="none">NO MINYAN</option>
             </select>
           </label>
 
@@ -409,23 +419,24 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
         </div>
 
         {rule.mode==="zman"&&(
-          <div className="ruleOptions">
+          <div className="ruleOptions ruleSelectOptions">
             <label>
-              <input
-                type="checkbox"
-                checked={rule.roundToFive}
-                onChange={e=>patchRule(rule.id,{roundToFive:e.target.checked})}
-              />
-              <span>Round earlier to the nearest 5 minutes</span>
+              <span>5-minute rounding</span>
+              <select value={rule.roundMode} onChange={e=>patchRule(rule.id,{roundMode:e.target.value as RoundMode})}>
+                <option value="exact">Exact zman calculation</option>
+                <option value="earlier">Round earlier to 5 minutes</option>
+                <option value="later">Round later to 5 minutes</option>
+              </select>
             </label>
             {rule.days.length>1&&(
               <label>
-                <input
-                  type="checkbox"
-                  checked={rule.sameTimeAcrossDays}
-                  onChange={e=>patchRule(rule.id,{sameTimeAcrossDays:e.target.checked})}
-                />
-                <span>Use the same time for all selected days</span>
+                <span>Keep selected days consistent</span>
+                <select value={rule.groupPeriod} onChange={e=>patchRule(rule.id,{groupPeriod:e.target.value as GroupPeriod})}>
+                  <option value="individual">Calculate each day separately</option>
+                  <option value="week_earliest">Same time for each week — use that week's earliest time</option>
+                  <option value="month_earliest">Same time for the month — use that month's earliest time</option>
+                </select>
+                <small>“Earliest” checks the calculated zman-based time across the selected days in that week or month.</small>
               </label>
             )}
           </div>
@@ -435,6 +446,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           {rule.mode==="fixed"&&<span>{rule.fixedTime || "Set a time"}</span>}
           {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {sourceLabel(rule.source)}</span>}
           {rule.mode==="follows"&&<span>{rule.followsText||"Follows Mincha"}</span>}
+          {rule.mode==="none"&&<span>NO MINYAN</span>}
         </div>
       </div>
     );
@@ -504,15 +516,22 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               {accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
             </div>
 
-            <div className="onboardGrid three">
+            <div className="onboardGrid fourBasics">
               <label className="onboardField">
                 <span>Shul name</span>
                 <input value={name} onChange={e=>setName(e.target.value)} placeholder="Example Shul" autoFocus/>
               </label>
               <label className="onboardField">
-                <span>ZIP code</span>
-                <input value={zip} inputMode="numeric" onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="44118"/>
-                <small>Used for automatic zmanim.</small>
+                <span>Country</span>
+                <select value={country} onChange={e=>setCountry(e.target.value)}>
+                  <option value="US">United States</option>
+                  <option value="GB">United Kingdom</option>
+                  <option value="IL">Israel</option>
+                </select>
+              </label>
+              <label className="onboardField">
+                <span>ZIP / Postal code</span>
+                <input value={zip} onChange={e=>setZip(e.target.value.toUpperCase())} placeholder={country==="US"?"44118":country==="GB"?"NW11 8AU":"9100000"}/>
               </label>
               <label className="onboardField">
                 <span>Shabbos / Yom Tov ends</span>
@@ -570,8 +589,14 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                     <div className="coverageRow" key={row.day}>
                       <strong>{row.label}</strong>
                       {SERVICES.map(service=>(
-                        <span className={row.covered[service]?"coverageDot yes":"coverageDot no"} key={service}>
-                          {row.covered[service]?"✓":"—"}
+                        <span className={row.status[service].covered?"coverageDot yes":"coverageDot no"} key={service}>
+                          {row.status[service].conflict
+                            ? "!"
+                            : row.status[service].noMinyan
+                              ? "NO"
+                              : row.status[service].minyanCount>0
+                                ? String(row.status[service].minyanCount)
+                                : "—"}
                         </span>
                       ))}
                     </div>
