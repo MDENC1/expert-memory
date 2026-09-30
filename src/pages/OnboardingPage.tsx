@@ -523,7 +523,6 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 <option value="earlier">Round to prior 5-min increment (9:13 → 9:10)</option>
                 <option value="later">Round to next 5-min increment (9:13 → 9:15)</option>
               </select>
-              <small>This rounds the final result to a 5-minute clock increment; it does not add or subtract another 5 minutes.</small>
             </label>
             {rule.days.length>1&&(
               <label>
