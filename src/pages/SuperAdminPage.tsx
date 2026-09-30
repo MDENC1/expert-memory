@@ -4,7 +4,7 @@ const orgs = [
   ["Sample Shul North","312","305","7","12:15 AM"]
 ];
 
-export default function SuperAdminPage(){
+export default function SuperAdminPage({onNewOrganization}:{onNewOrganization:()=>void}){
   return <>
     <div className="pageHeader">
       <div>
@@ -12,7 +12,7 @@ export default function SuperAdminPage(){
         <h1>Super Admin</h1>
         <p>Manage every organization and deployed device from one place.</p>
       </div>
-      <button className="primary">+ New Organization</button>
+      <button className="primary" onClick={onNewOrganization}>+ New Organization</button>
     </div>
 
     <div className="statsGrid">
