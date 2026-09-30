@@ -95,6 +95,7 @@ function sourceFromShulDefault(family:string,defaults:ZmanDefaults){
     if(defaults.nightfall==="rt72")return "night_72fix";
     return "night_gra180";
   }
+  if(family==="shabbos_end")return "shabbos_end";
   return "";
 }
 
@@ -508,9 +509,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const source=(r.use_shul_zman_default&&r.zman_family)
       ? sourceFromShulDefault(r.zman_family,zmanDefaults)
       : (r.timing_source||"");
+    const isShabbosEnd=source==="shabbos_end";
     const map=source==="plag"
       ? zmanim.plagHaMincha
-      : source==="sunset"
+      : source==="sunset" || isShabbosEnd
         ? zmanim.sunset
         : zmanim.sources?.[source];
     if(!map)return "";
@@ -545,7 +547,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const targets=candidateDates
       .map(key=>timeMinutesFromIso(map[key]))
       .filter((value):value is number=>value!==null)
-      .map(value=>value+(r.timing_offset_minutes||0));
+      .map(value=>value+(isShabbosEnd?shabbosEndMinutes:0)+(r.timing_offset_minutes||0));
 
     if(!targets.length)return "";
     const raw=period==="individual" ? targets[0] : Math.min(...targets);
