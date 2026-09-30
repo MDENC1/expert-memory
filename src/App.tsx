@@ -41,6 +41,8 @@ export type LiveScheduleEntry = {
   use_weekly_earliest: boolean | null;
   weekly_group: string | null;
   group_period: "individual" | "week_earliest" | "month_earliest" | null;
+  zman_family: string | null;
+  use_shul_zman_default: boolean | null;
 };
 
 type SpecialScheduleDay = {
