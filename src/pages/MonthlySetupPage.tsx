@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CalendarDay } from "../types";
+import type { HebcalSpecialEvent } from "../App";
 import { jewishMonthTemplates } from "../data/mock";
+import { supabase } from "../lib/supabase";
 
 type SpecialValues = Record<string,string>;
 type FastEndRule = 42 | 60 | 72;
 type FastOverride = {start?:string;end?:string};
+type FocusedScheduleRow = {label:string;time:string};
+type FocusedSpecialDate = {event:HebcalSpecialEvent};
 
 const fastDays = [
   {key:"gedalia",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
@@ -23,12 +27,113 @@ function formatMinutes(total:number) {
   return `${h24%12 || 12}:${String(minute).padStart(2,"0")} ${suffix}`;
 }
 
-export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setDays:(d:CalendarDay[])=>void}) {
+function defaultRowsForSpecialDate(title:string):FocusedScheduleRow[] {
+  const t=title.toLowerCase();
+
+  if(t.includes("yom kippur")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Yizkor",time:""},
+      {label:"Mincha",time:""},
+      {label:"Neilah",time:""},
+      {label:"Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("rosh hashana")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Shofar",time:""},
+      {label:"Mincha",time:""},
+      {label:"Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("chol") || t.includes("hoshana")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Mincha / Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("shemini")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Yizkor",time:""},
+      {label:"Mincha",time:""},
+      {label:"Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("simchat") || t.includes("simchas")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Hakafos",time:""},
+      {label:"Mincha",time:""},
+      {label:"Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("purim")){
+    return [
+      {label:"Shacharis",time:""},
+      {label:"Megillah",time:""},
+      {label:"Mincha",time:""},
+      {label:"Maariv",time:""}
+    ];
+  }
+
+  if(t.includes("selich")){
+    return [
+      {label:"Selichos",time:""},
+      {label:"Shacharis",time:""}
+    ];
+  }
+
+  return [
+    {label:"Shacharis",time:""},
+    {label:"Mincha",time:""},
+    {label:"Maariv",time:""}
+  ];
+}
+
+function focusedDateLabel(date:string){
+  return new Intl.DateTimeFormat("en-US",{
+    weekday:"long",
+    month:"long",
+    day:"numeric",
+    year:"numeric"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+export default function MonthlySetupPage({
+  days,
+  setDays,
+  shulId="",
+  specialCalendarEvents=[],
+  focusGroup="",
+  onClearFocus,
+  onSpecialSchedulesChanged
+}:{
+  days:CalendarDay[];
+  setDays:(d:CalendarDay[])=>void;
+  shulId?:string;
+  specialCalendarEvents?:HebcalSpecialEvent[];
+  focusGroup?:string;
+  onClearFocus?:()=>void;
+  onSpecialSchedulesChanged?:()=>void;
+}) {
   const [month,setMonth] = useState("Tishrei");
   const [postalCode,setPostalCode] = useState("44124");
   const [fastEndRule,setFastEndRule] = useState<FastEndRule>(42);
   const [status,setStatus] = useState("MyZmanim settings are current.");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
+  const [focusedMissing,setFocusedMissing] = useState<FocusedSpecialDate[]>([]);
+  const [focusedDrafts,setFocusedDrafts] = useState<Record<string,FocusedScheduleRow[]>>({});
+  const [focusedLoading,setFocusedLoading] = useState(false);
+  const [focusedError,setFocusedError] = useState("");
+  const [focusedSavingDate,setFocusedSavingDate] = useState("");
+
   const [values,setValues] = useState<SpecialValues>({
     selichos:"06:00",
     rh_shacharis:"08:00",
@@ -43,6 +148,166 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
     hakafos_night:"19:45",
     hakafos_day:"10:45"
   });
+
+  useEffect(()=>{
+    if(!focusGroup||!shulId){
+      setFocusedMissing([]);
+      return;
+    }
+
+    let cancelled=false;
+
+    async function loadFocusedMissing(){
+      setFocusedLoading(true);
+      setFocusedError("");
+
+      const uniqueByDate=new Map<string,HebcalSpecialEvent>();
+      for(const event of specialCalendarEvents
+        .filter(event=>event.group_key===focusGroup&&event.requires_confirmation)
+        .sort((a,b)=>a.date.localeCompare(b.date))){
+        const existing=uniqueByDate.get(event.date);
+        if(!existing||(!existing.blocks_regular_schedule&&event.blocks_regular_schedule)){
+          uniqueByDate.set(event.date,event);
+        }
+      }
+
+      const events=[...uniqueByDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+      const dates=events.map(event=>event.date);
+
+      if(!dates.length){
+        if(!cancelled){
+          setFocusedMissing([]);
+          setFocusedLoading(false);
+        }
+        return;
+      }
+
+      const [daysRes,entriesRes,overridesRes]=await Promise.all([
+        supabase.from("special_schedule_days")
+          .select("event_date,replace_normal_schedule,confirmed_at")
+          .eq("shul_id",shulId)
+          .in("event_date",dates),
+        supabase.from("special_schedule_entries")
+          .select("event_date")
+          .eq("shul_id",shulId)
+          .eq("active",true)
+          .in("event_date",dates),
+        supabase.from("schedule_overrides")
+          .select("event_date")
+          .eq("shul_id",shulId)
+          .eq("active",true)
+          .in("event_date",dates)
+      ]);
+
+      if(cancelled)return;
+
+      const err=daysRes.error||entriesRes.error||overridesRes.error;
+      if(err){
+        setFocusedError(err.message);
+        setFocusedLoading(false);
+        return;
+      }
+
+      const dayMap=new Map((daysRes.data||[]).map(row=>[String(row.event_date),row]));
+      const entryCounts=new Map<string,number>();
+      for(const row of entriesRes.data||[]){
+        const key=String(row.event_date);
+        entryCounts.set(key,(entryCounts.get(key)||0)+1);
+      }
+      const overrideCounts=new Map<string,number>();
+      for(const row of overridesRes.data||[]){
+        const key=String(row.event_date);
+        overrideCounts.set(key,(overrideCounts.get(key)||0)+1);
+      }
+
+      const configured=(date:string)=>{
+        if((overrideCounts.get(date)||0)>0)return true;
+        const day:any=dayMap.get(date);
+        if(!day||!day.confirmed_at)return false;
+        if(day.replace_normal_schedule===false)return true;
+        return (entryCounts.get(date)||0)>0;
+      };
+
+      const missing=events.filter(event=>!configured(event.date)).map(event=>({event}));
+      setFocusedMissing(missing);
+      setFocusedDrafts(current=>{
+        const next={...current};
+        for(const {event} of missing){
+          if(!next[event.date])next[event.date]=defaultRowsForSpecialDate(event.title);
+        }
+        return next;
+      });
+      setFocusedLoading(false);
+    }
+
+    void loadFocusedMissing();
+    return()=>{cancelled=true;};
+  },[focusGroup,shulId,specialCalendarEvents]);
+
+  const updateFocusedRow=(date:string,index:number,field:keyof FocusedScheduleRow,value:string)=>{
+    setFocusedDrafts(current=>({
+      ...current,
+      [date]:(current[date]||[]).map((row,i)=>i===index?{...row,[field]:value}:row)
+    }));
+  };
+
+  const addFocusedRow=(date:string)=>{
+    setFocusedDrafts(current=>({
+      ...current,
+      [date]:[...(current[date]||[]),{label:"",time:""}]
+    }));
+  };
+
+  const removeFocusedRow=(date:string,index:number)=>{
+    setFocusedDrafts(current=>({
+      ...current,
+      [date]:(current[date]||[]).filter((_,i)=>i!==index)
+    }));
+  };
+
+  const confirmFocusedSchedule=async(event:HebcalSpecialEvent)=>{
+    const rows=(focusedDrafts[event.date]||[])
+      .map((row,index)=>({
+        title:row.label.trim(),
+        event_time:row.time||null,
+        approximate:false,
+        note:null,
+        sort_order:(index+1)*10
+      }))
+      .filter(row=>row.title);
+
+    if(!rows.length){
+      setFocusedError(`Add at least one schedule item for ${event.title}.`);
+      return;
+    }
+
+    setFocusedSavingDate(event.date);
+    setFocusedError("");
+
+    const {error}=await supabase.rpc("confirm_special_schedule",{
+      p_shul_id:shulId,
+      p_event_date:event.date,
+      p_title:event.title,
+      p_rows:rows,
+      p_replace_normal_schedule:true
+    });
+
+    if(error){
+      setFocusedError(error.message);
+      setFocusedSavingDate("");
+      return;
+    }
+
+    setFocusedMissing(current=>current.filter(item=>item.event.date!==event.date));
+    setFocusedDrafts(current=>{
+      const next={...current};
+      delete next[event.date];
+      return next;
+    });
+    setFocusedSavingDate("");
+    onSpecialSchedulesChanged?.();
+  };
+
 
   const template = useMemo(
     () => jewishMonthTemplates.find(item => item.month === month) ?? jewishMonthTemplates[0],
@@ -83,6 +348,97 @@ export default function MonthlySetupPage({days,setDays}:{days:CalendarDay[];setD
   const saveAndRecalculate=()=>{
     setStatus(`MyZmanim recalculated for ZIP ${postalCode}. All automatic fast-end times now use ${fastEndRule} minutes after sunset; manual overrides were preserved.`);
   };
+
+  if(focusGroup){
+    const focusEvents=specialCalendarEvents.filter(event=>event.group_key===focusGroup);
+    const focusLabel=focusEvents[0]?.group_label || "Special Schedule";
+
+    return (
+      <>
+        <div className="pageHeader">
+          <div>
+            <span className="eyebrow">Monthly Setup · Needs attention</span>
+            <h1>{focusLabel}</h1>
+            <p>Only dates that still need a confirmed shul schedule are shown here.</p>
+          </div>
+          {onClearFocus&&<button className="secondary" onClick={onClearFocus}>Show All Monthly Setup</button>}
+        </div>
+
+        {focusedError&&(
+          <div className="panel" style={{marginBottom:14,borderColor:"#c44"}}>
+            <strong>Setup error:</strong> {focusedError}
+          </div>
+        )}
+
+        {focusedLoading ? (
+          <div className="panel"><strong>Checking which special dates still need times…</strong></div>
+        ) : focusedMissing.length===0 ? (
+          <div className="panel specialSetupComplete">
+            <span className="eyebrow">Complete</span>
+            <h2>All {focusLabel} dates are confirmed.</h2>
+            <p className="helperText">The dashboard reminder will stay cleared unless a schedule is changed or a new required date appears.</p>
+          </div>
+        ) : (
+          <div className="focusedSpecialSetupList">
+            <div className="panel focusedSpecialSummary">
+              <strong>{focusedMissing.length} date{focusedMissing.length===1?"":"s"} still need confirmation</strong>
+              <span>Enter only the shul-specific times for each date, then confirm it. Confirmed dates disappear from this list.</span>
+            </div>
+
+            {focusedMissing.map(({event})=>{
+              const rows=focusedDrafts[event.date]||[];
+              return (
+                <div className="panel focusedSpecialCard" key={event.date}>
+                  <div className="panelHead">
+                    <div>
+                      <span className="eyebrow">{focusedDateLabel(event.date)}</span>
+                      <h2>{event.title}</h2>
+                      <p className="helperText">Regular weekly times will not be used for this date until a special schedule is confirmed.</p>
+                    </div>
+                  </div>
+
+                  <div className="focusedSpecialRows">
+                    {rows.map((row,index)=>(
+                      <div className="focusedSpecialRow" key={index}>
+                        <label>
+                          <span>Schedule item</span>
+                          <input
+                            value={row.label}
+                            placeholder="Shacharis"
+                            onChange={e=>updateFocusedRow(event.date,index,"label",e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Time</span>
+                          <input
+                            type="time"
+                            value={row.time}
+                            onChange={e=>updateFocusedRow(event.date,index,"time",e.target.value)}
+                          />
+                        </label>
+                        <button className="secondary focusedRemoveRow" onClick={()=>removeFocusedRow(event.date,index)}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="focusedSpecialActions">
+                    <button className="secondary" onClick={()=>addFocusedRow(event.date)}>+ Add Time</button>
+                    <button
+                      className="primary"
+                      disabled={focusedSavingDate===event.date}
+                      onClick={()=>confirmFocusedSchedule(event)}
+                    >
+                      {focusedSavingDate===event.date?"Saving…":"Confirm This Date"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <>
