@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarDay, Notice, NoticeType } from "../types";
-import type { LiveScheduleEntry } from "../App";
+import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
 
@@ -13,6 +13,7 @@ type Props = {
   countryCode: string;
   locationId: string;
   shulId: string;
+  focusDate?: string;
 };
 
 type MonthCell = {
@@ -204,7 +205,7 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId,focusDate=""}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
@@ -220,6 +221,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [zmanim,setZmanim] = useState<ZmanimBatch>({});
   const [zmanimError,setZmanimError] = useState("");
   const [zmanimSource,setZmanimSource] = useState("");
+  const [hebcalEvents,setHebcalEvents] = useState<HebcalSpecialEvent[]>([]);
+  const [hebcalError,setHebcalError] = useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
   const [zmanDefaults,setZmanDefaults] = useState<ZmanDefaults>(DEFAULT_ZMAN_DEFAULTS);
   const [overrides,setOverrides] = useState<ScheduleOverride[]>([]);
@@ -238,8 +241,20 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setError("");
     setZmanimError("");
     setZmanimSource("");
+    setHebcalEvents([]);
+    setHebcalError("");
     setZmanDefaults(DEFAULT_ZMAN_DEFAULTS);
   },[shulId]);
+
+  useEffect(()=>{
+    if(!focusDate)return;
+    const target=new Date(`${focusDate}T12:00:00`);
+    if(Number.isNaN(target.getTime()))return;
+    setViewDate(new Date(target.getFullYear(),target.getMonth(),1,12));
+    setSelected([focusDate]);
+    setMultiMode(false);
+    setShowAdd(false);
+  },[focusDate]);
 
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
@@ -309,7 +324,21 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             }))
         : Promise.resolve({__error:"No postal code configured"});
 
-      const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
+      const hebcalPromise=supabase.functions.invoke("hebcal-calendar",{
+        body:{
+          start_date:startDate,
+          end_date:endDate,
+          country_code:countryCode
+        }
+      }).then(({data,error})=>{
+        if(error)throw error;
+        if(!data?.success)throw new Error(data?.error||"Hebcal request failed");
+        return {events:(data.events||[]) as HebcalSpecialEvent[]};
+      }).catch(hebcalErr=>({
+        __error:`Hebcal: ${String(hebcalErr?.message||hebcalErr)}`
+      }));
+
+      const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes,hebcalRes]=await Promise.all([supabasePromise,zmanimPromise,hebcalPromise]);
       if(cancelled)return;
 
       const err=daysRes.error||entriesRes.error||overridesRes.error||zmanimSettingsRes.error;
@@ -370,6 +399,14 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         setZmanimSource(wrapped.source||"");
         setZmanimError("");
       }
+      if((hebcalRes as any).__error){
+        setHebcalEvents([]);
+        setHebcalError((hebcalRes as any).__error);
+      }else{
+        setHebcalEvents(((hebcalRes as any).events||[]) as HebcalSpecialEvent[]);
+        setHebcalError("");
+      }
+
       setLoading(false);
     }
     loadMonth();
@@ -388,6 +425,33 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     for(const o of overrides)m.set(o.event_date,[...(m.get(o.event_date)||[]),o]);
     return m;
   },[overrides]);
+
+  const hebcalEventMap=useMemo(()=>{
+    const m=new Map<string,HebcalSpecialEvent[]>();
+    for(const event of hebcalEvents){
+      m.set(event.date,[...(m.get(event.date)||[]),event]);
+    }
+    return m;
+  },[hebcalEvents]);
+
+  const primaryHebcalEvent=(date:string)=>{
+    const events=hebcalEventMap.get(date)||[];
+    return events.find(event=>event.blocks_regular_schedule)
+      || events.find(event=>event.yomtov)
+      || events[0];
+  };
+
+  const blockingHebcalEvent=(date:string)=>{
+    return (hebcalEventMap.get(date)||[]).find(event=>event.blocks_regular_schedule);
+  };
+
+  const dateHasConfiguredSpecialSchedule=(date:string)=>{
+    if((overrideMap.get(date)||[]).length>0)return true;
+    const day=dayMap.get(date);
+    if(!day)return false;
+    if(day.replace_normal_schedule===false)return true;
+    return (entriesMap.get(date)||[]).length>0;
+  };
 
   const prettyTime=(value:string|null)=>{
     if(!value)return "";
@@ -560,9 +624,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const sunset=timeMinutesFromIso(zmanim.sunset?.[date]);
     if(sunset===null)return [];
 
-    const currentYomTov=yomTovInfoForDate(date);
+    const currentYomTov=(hebcalEventMap.get(date)||[]).find(event=>event.yomtov);
     const nextDate=shiftIsoDate(date,1);
-    const nextYomTov=yomTovInfoForDate(nextDate);
+    const nextYomTov=(hebcalEventMap.get(nextDate)||[]).find(event=>event.yomtov);
     const endThreshold=sunset+shabbosEndMinutes;
 
     // Yom Tov transitions always take precedence over ordinary
@@ -585,7 +649,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         ];
       }
 
-      if(nextYomTov.key==="yom_kippur"){
+      if(/yom kippur/i.test(nextYomTov.title)){
         return [
           {
             key:"candle_lighting",
@@ -611,7 +675,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
 
     if(currentYomTov){
-      if(currentYomTov.key==="yom_kippur"){
+      if(/yom kippur/i.test(currentYomTov.title)){
         return [{
           key:"fast_ends",
           label:"Fast Ends",
@@ -693,10 +757,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
     }
 
-    // A Yom Tov replaces the normal weekday/Shabbos schedule.
-    // If no Yom Tov-specific rows are configured yet, do not fall back
-    // to an incorrect regular or Shabbos schedule.
-    if(yomTovInfoForDate(date))return [];
+    // Hebcal owns the Jewish calendar/date classification. If this date
+    // requires a special schedule and the shul has not configured one,
+    // never silently fall back to the regular weekly schedule.
+    if(blockingHebcalEvent(date))return [];
 
     const dayRules=scheduleEntries.filter(r=>r.day_of_week===d.getDay());
     const maarivFollowsMincha=dayRules.some(r=>
@@ -719,6 +783,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const selectedCell=selectedDay ? monthCells.find(c=>c.date===selectedDay) : undefined;
   const selectedRows=selectedDay ? rowsForDate(selectedDay) : [];
   const selectedSpecial=selectedDay ? dayMap.get(selectedDay) : undefined;
+  const selectedHebcalEvent=selectedDay ? primaryHebcalEvent(selectedDay) : undefined;
+  const selectedBlockingEvent=selectedDay ? blockingHebcalEvent(selectedDay) : undefined;
   const selectedHasManualOverride=selectedDay ? (overrideMap.get(selectedDay)?.length||0)>0 : false;
   const multiHasManualOverride=selected.length>1 && selected.some(date=>(overrideMap.get(date)?.length||0)>0);
 
@@ -773,7 +839,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     isShabbos:selectedCell.isShabbos,
     holiday:(selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title)
       ? selectedSpecial.title
-      : yomTovInfoForDate(selectedCell.date)?.name),
+      : selectedHebcalEvent?.title),
     specialTimes:keyTimesForDate(selectedCell.date),
     zmanimRows:[
       {label:"Netz",time:minutesToDisplay(timeMinutesFromIso(zmanim.sunrise?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.sunrise?.[selectedCell.date])!==null},
@@ -1018,18 +1084,21 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               const keyTimes=keyTimesForDate(cell.date);
               const special=dayMap.get(cell.date);
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
+              const hebcalEvent=primaryHebcalEvent(cell.date);
+              const missingSpecial=Boolean(blockingHebcalEvent(cell.date))&&!dateHasConfiguredSpecialSchedule(cell.date);
               const holiday=special?.title && !/^tishrei schedule$/i.test(special.title)
                 ? special.title
-                : yomTovInfoForDate(cell.date)?.name;
+                : hebcalEvent?.title;
               return (
                 <button
                   key={cell.date}
-                  className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""}`}
+                  className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""} ${missingSpecial?"missingSpecialSchedule":""}`}
                   onClick={()=>handleDayClick(cell.date)}
                 >
                   <div className="dateTop"><strong>{cell.day}</strong><span>{cell.hebrewDay} {cell.hebrewMonth}</span></div>
                   <div className="dayTags">
                     {holiday && <span className="jewishTag">{holiday}</span>}
+                    {missingSpecial && <span className="specialSetupTag">Schedule needed</span>}
                     {cell.isRoshChodesh && !holiday && <span className="jewishTag">Rosh Chodesh</span>}
                     {matching.length>0 && <span className="eventCount">{matching.length} scheduled</span>}
                   </div>
@@ -1054,10 +1123,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             <>
               <div className="panel compactPanel">
                 <div className="panelHead"><div><span className="eyebrow">Selected day</span><h2>{new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selectedCalendarDay.date}T12:00:00`))}</h2></div></div>
-                {editRows.length===0 && selectedDay && yomTovInfoForDate(selectedDay) && (
+                {editRows.length===0 && selectedDay && selectedBlockingEvent && (
                   <div className="yomTovScheduleMissing">
-                    <b>{yomTovInfoForDate(selectedDay)?.name} supersedes the regular schedule.</b>
-                    <span>No Yom Tov-specific davening schedule is configured for this date yet.</span>
+                    <b>{selectedBlockingEvent.title} supersedes the regular schedule.</b>
+                    <span>No special davening schedule is configured for this date yet. The regular weekly schedule is intentionally being withheld as a safety net.</span>
                   </div>
                 )}
                 <div className="selectedDayEditList">
