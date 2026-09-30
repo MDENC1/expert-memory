@@ -71,13 +71,28 @@ async function getDay(user:string,key:string,locationId:string,date:string) {
     InputDate: date,
   });
 
-  const response = await fetch(
-    "https://api.myzmanim.com/engine1.json.aspx/getDay",
-    { method: "POST", headers, body: dayParams }
-  );
-  const data = await response.json();
-  if (data.ErrMsg) throw new Error(data.ErrMsg);
-  return data;
+  let lastError:unknown=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const response = await fetch(
+        "https://api.myzmanim.com/engine1.json.aspx/getDay",
+        {
+          method: "POST",
+          headers,
+          body: dayParams,
+          signal: AbortSignal.timeout(6000)
+        }
+      );
+      if(!response.ok) throw new Error(`MyZmanim HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.ErrMsg) throw new Error(data.ErrMsg);
+      return data;
+    }catch(error){
+      lastError=error;
+      if(attempt===0)await new Promise(resolve=>setTimeout(resolve,250));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("MyZmanim request failed");
 }
 
 function resolveTimezone(countryCode:string,postalCode:string) {
@@ -190,14 +205,26 @@ Deno.serve(async (req) => {
     for (const key of Object.keys(sourceFields)) sources[key] = {};
     let place: Record<string, unknown> | null = null;
 
-    const results = await Promise.all(dates.map(async (date) => {
-      try{
-        const data=await getDay(user,key,locationId,date);
-        return {date,data};
-      }catch(error){
-        throw new Error(`${date}: ${error instanceof Error?error.message:"MyZmanim error"}`);
-      }
-    }));
+    const results:Array<{date:string;data:any}>=[];
+
+    // Keep MyZmanim traffic bounded. The admin UI can ask for a month of
+    // dates, and React development mode may issue duplicate requests.
+    // Small batches prevent a browser refresh from turning into dozens of
+    // simultaneous upstream calls.
+    const batchSize=4;
+    for(let i=0;i<dates.length;i+=batchSize){
+      const batch=dates.slice(i,i+batchSize);
+      const batchResults=await Promise.all(batch.map(async (date) => {
+        try{
+          const data=await getDay(user,key,locationId,date);
+          return {date,data};
+        }catch(error){
+          throw new Error(`${date}: ${error instanceof Error?error.message:"MyZmanim error"}`);
+        }
+      }));
+      results.push(...batchResults);
+      if(i+batchSize<dates.length)await new Promise(resolve=>setTimeout(resolve,75));
+    }
 
     for (const { date, data } of results) {
       if (!place) {
@@ -235,6 +262,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    console.error("MyZmanim function error:", error instanceof Error ? error.message : error);
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
