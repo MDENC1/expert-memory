@@ -507,14 +507,10 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           )}
 
           {rule.mode==="follows"&&(
-            <label className="followsField">
-              <span>Display</span>
-              <input
-                value={rule.followsText}
-                onChange={e=>patchRule(rule.id,{followsText:e.target.value})}
-                placeholder="Follows Mincha"
-              />
-            </label>
+            <div className="followsGroupingNote">
+              <strong>Grouped display</strong>
+              <span>Each Mincha on the selected day will display as “Mincha / Maariv” at that Mincha time. No separate Maariv row will be shown.</span>
+            </div>
           )}
         </div>
 
