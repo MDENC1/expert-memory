@@ -1,4 +1,4 @@
-import tzLookup from "npm:tz-lookup@6.1.25";
+import zipToTz from "npm:zip-to-tz@1.1.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,30 +75,15 @@ async function getDay(user:string,key:string,locationId:string,date:string) {
   return data;
 }
 
-async function resolveTimezone(countryCode:string,postalCode:string,place:any) {
+function resolveTimezone(countryCode:string,postalCode:string) {
   if (countryCode==="GB") return "Europe/London";
   if (countryCode==="IL") return "Asia/Jerusalem";
-
-  const params=new URLSearchParams({
-    format:"jsonv2",
-    postalcode:postalCode,
-    countrycodes:countryCode.toLowerCase(),
-    limit:"1",
-    addressdetails:"1"
-  });
-  const response=await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`,{
-    headers:{
-      "User-Agent":"MagnetsPrototype/0.1 location-verification",
-      "Accept":"application/json"
-    }
-  });
-  if(!response.ok) throw new Error("Could not resolve the location time zone.");
-  const matches=await response.json();
-  const first=Array.isArray(matches)?matches[0]:null;
-  if(!first?.lat||!first?.lon){
-    throw new Error(`Could not determine the time zone for ${place?.NameShort||postalCode}.`);
+  if (countryCode==="US") {
+    const timezone=zipToTz(postalCode);
+    if(!timezone) throw new Error("Could not determine the U.S. time zone for that ZIP code.");
+    return timezone;
   }
-  return tzLookup(Number(first.lat),Number(first.lon));
+  throw new Error("Time zone lookup is not configured for the selected country.");
 }
 
 function cleanPlace(data:any) {
@@ -136,7 +121,7 @@ Deno.serve(async (req) => {
         throw new Error(`Postal code matched ${returnedCountry}, not the selected country.`);
       }
       const place=cleanPlace(day);
-      const timezone=await resolveTimezone(countryCode,postalCode,day?.Place);
+      const timezone=resolveTimezone(countryCode,postalCode);
       return new Response(JSON.stringify({
         success:true,
         source:"MyZmanim",
@@ -246,7 +231,7 @@ Deno.serve(async (req) => {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     }), {
-      status: 400,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
