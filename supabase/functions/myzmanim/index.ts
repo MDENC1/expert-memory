@@ -1,4 +1,9 @@
-import zipToTz from "npm:zip-to-tz@1.1.0";
+import zipToTzModule from "npm:zip-to-tz@1.1.0";
+
+const zipToTz:any =
+  typeof zipToTzModule === "function"
+    ? zipToTzModule
+    : (zipToTzModule as any)?.default;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +84,9 @@ function resolveTimezone(countryCode:string,postalCode:string) {
   if (countryCode==="GB") return "Europe/London";
   if (countryCode==="IL") return "Asia/Jerusalem";
   if (countryCode==="US") {
+    if(typeof zipToTz!=="function"){
+      throw new Error("U.S. time zone lookup failed to initialize.");
+    }
     const timezone=zipToTz(postalCode);
     if(!timezone) throw new Error("Could not determine the U.S. time zone for that ZIP code.");
     return timezone;
