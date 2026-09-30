@@ -25,6 +25,18 @@ type ZmanFamilyKey = "dawn" | "sunrise" | "shema" | "midday" | "mincha_gedolah" 
 type ZmanDefaultCategory = "dawn" | "shema" | "midday" | "mincha" | "nightfall";
 type ZmanDefaults = Record<ZmanDefaultCategory,string>;
 
+type VerifiedLocation = {
+  locationId:string;
+  timezone:string;
+  place:{
+    name:string|null;
+    city:string|null;
+    state:string|null;
+    country:string|null;
+    postal_code:string|null;
+  };
+};
+
 type MinyanRule = {
   id:string;
   service:Service;
@@ -304,6 +316,9 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     mincha:"gra",
     nightfall:"gra"
   });
+  const [locationStatus,setLocationStatus]=useState<"idle"|"checking"|"verified"|"error">("idle");
+  const [verifiedLocation,setVerifiedLocation]=useState<VerifiedLocation|null>(null);
+  const [locationError,setLocationError]=useState("");
   const [rules,setRules]=useState<MinyanRule[]>(initialRules);
 
   useEffect(()=>{
@@ -314,6 +329,56 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       }
     });
   },[]);
+
+  useEffect(()=>{
+    setVerifiedLocation(null);
+    setLocationError("");
+    setLocationStatus("idle");
+
+    const postal=zip.trim();
+    const minimumLength=country==="US"?5:country==="GB"?3:country==="IL"?5:3;
+    if(postal.length<minimumLength)return;
+
+    let cancelled=false;
+    const timer=window.setTimeout(async()=>{
+      setLocationStatus("checking");
+      const {data,error}=await supabase.functions.invoke("myzmanim",{
+        body:{
+          action:"resolve_location",
+          country_code:country,
+          postal_code:postal
+        }
+      });
+
+      if(cancelled)return;
+
+      if(error||!data?.success||!data?.verified||!data?.location_id||!data?.timezone){
+        setVerifiedLocation(null);
+        setLocationStatus("error");
+        setLocationError(data?.error||error?.message||"MyZmanim could not verify that location.");
+        return;
+      }
+
+      setVerifiedLocation({
+        locationId:String(data.location_id),
+        timezone:String(data.timezone),
+        place:{
+          name:data.place?.name||null,
+          city:data.place?.city||null,
+          state:data.place?.state||null,
+          country:data.place?.country||null,
+          postal_code:data.place?.postal_code||null
+        }
+      });
+      setLocationStatus("verified");
+      setLocationError("");
+    },550);
+
+    return()=>{
+      cancelled=true;
+      window.clearTimeout(timer);
+    };
+  },[country,zip]);
 
   const coverage=useMemo(()=>{
     const matrix=DAYS.map(day=>({
@@ -389,6 +454,10 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     setError("");
     if(!name.trim()){setError("Enter the shul name.");return;}
     if(!zip.trim()){setError("Enter a ZIP / postal code.");return;}
+    if(locationStatus!=="verified"||!verifiedLocation){
+      setError("Wait for the location to be verified with MyZmanim before creating the shul.");
+      return;
+    }
     if(coverage.hasConflict){setError("A day cannot have both NO MINYAN and a configured minyan for the same tefillah.");return;}
     if(!coverage.complete){setError("Finish the weekly coverage first. Each day needs either a minyan or NO MINYAN for Shacharis, Mincha, and Maariv.");return;}
     if(emptyDayRule){setError(`${emptyDayRule.name} does not apply to any day. Select a day or delete that minyan.`);return;}
@@ -437,7 +506,14 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
       p_name:name.trim(),
       p_country_code:country,
       p_postal_code:zip.trim(),
-      p_timezone:"America/New_York",
+      p_timezone:verifiedLocation.timezone,
+      p_myzmanim_location_id:verifiedLocation.locationId,
+      p_location_metadata:{
+        ...verifiedLocation.place,
+        timezone:verifiedLocation.timezone,
+        location_id:verifiedLocation.locationId,
+        verified_by:"MyZmanim"
+      },
       p_shabbos_end_minutes:shabbosEndMinutes,
       p_zman_defaults:zmanDefaults,
       p_schedule_rows:rows
@@ -752,6 +828,38 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               </label>
             </div>
 
+            <div className={`locationVerifyBox ${locationStatus}`}>
+              {locationStatus==="idle"&&(
+                <>
+                  <strong>Location verification</strong>
+                  <span>Enter Country and ZIP / Postal code. We’ll verify the location with MyZmanim automatically.</span>
+                </>
+              )}
+              {locationStatus==="checking"&&(
+                <>
+                  <strong>Checking location with MyZmanim…</strong>
+                  <span>Confirming the place and correct time zone.</span>
+                </>
+              )}
+              {locationStatus==="verified"&&verifiedLocation&&(
+                <>
+                  <strong><CheckCircle2 size={15}/> Location verified with MyZmanim</strong>
+                  <span>
+                    {[verifiedLocation.place.city||verifiedLocation.place.name,verifiedLocation.place.state,verifiedLocation.place.country]
+                      .filter(Boolean).join(", ")}
+                  </span>
+                  <small>Time zone: {verifiedLocation.timezone}</small>
+                </>
+              )}
+              {locationStatus==="error"&&(
+                <>
+                  <strong>Location could not be verified</strong>
+                  <span>Check the selected country and ZIP / Postal code.</span>
+                  {locationError&&<small>{locationError}</small>}
+                </>
+              )}
+            </div>
+
             <div className="zmanDefaultsBlock">
               <div className="zmanDefaultsHead">
                 <div>
@@ -858,7 +966,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
                 <button
                   className="primary createShulButton"
-                  disabled={busy||!coverage.complete}
+                  disabled={busy||!coverage.complete||locationStatus!=="verified"}
                   onClick={createShul}
                 >
                   {busy?"Creating shul...":"Create Shul & Open Dashboard"}
