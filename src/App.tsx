@@ -61,6 +61,38 @@ type SpecialScheduleEntry = {
   sort_order:number;
 };
 
+type ScheduleOverrideRow = {
+  event_date:string;
+  service_type:string;
+  service_time:string|null;
+  sort_order:number;
+};
+
+export type HebcalSpecialEvent = {
+  date:string;
+  title:string;
+  hdate:string|null;
+  hebrew:string|null;
+  group_key:string;
+  group_label:string;
+  lead_days:number;
+  blocks_regular_schedule:boolean;
+  requires_confirmation:boolean;
+  yomtov:boolean;
+  subcat:string|null;
+};
+
+export type SpecialSetupAlert = {
+  groupKey:string;
+  label:string;
+  firstDate:string;
+  nextMissingDate:string;
+  missingCount:number;
+  totalCount:number;
+  daysUntil:number;
+  urgent:boolean;
+};
+
 type PreviewZmanimBatch = {
   plagHaMincha?: Record<string,string>;
   sunset?: Record<string,string>;
@@ -312,7 +344,9 @@ function buildLiveDay(
   specialEntries:SpecialScheduleEntry[],
   zmanim:PreviewZmanimBatch,
   zmanDefaults:ZmanDefaults,
-  shabbosEndMinutes:number
+  shabbosEndMinutes:number,
+  manualOverrides:ScheduleOverrideRow[],
+  specialRequirement:HebcalSpecialEvent|undefined
 ):CalendarDay {
   const now=new Date();
   const today=localIsoDate(now);
@@ -327,11 +361,26 @@ function buildLiveDay(
     hebrewFullDate:hebrewFullDate(now),
     isShabbos:dow===6,
     isRoshChodesh:h.day==="1" || h.day==="30",
-    holiday:isGenericSpecialTitle(specialDay?.title) ? undefined : (specialDay?.title || undefined),
-    template:specialDay?.title || (dow===6 ? "Shabbos" : "Regular")
+    holiday:isGenericSpecialTitle(specialDay?.title)
+      ? (specialRequirement?.title || undefined)
+      : (specialDay?.title || specialRequirement?.title || undefined),
+    template:specialDay?.title || specialRequirement?.group_label || (dow===6 ? "Shabbos" : "Regular")
   };
 
-  if(specialDay?.replace_normal_schedule && specialEntries.length){
+  if(manualOverrides.length){
+    return {
+      ...base,
+      shulScheduleRows:manualOverrides
+        .slice()
+        .sort((a,b)=>a.sort_order-b.sort_order)
+        .map(row=>({
+          label:row.service_type,
+          time:row.service_time?prettyTime(row.service_time):undefined
+        }))
+    };
+  }
+
+    if(specialDay?.replace_normal_schedule && specialEntries.length){
     const rows=specialEntries.map(e=>({
       label:e.title,
       time:e.event_time ? prettyTime(e.event_time) : undefined,
@@ -349,6 +398,18 @@ function buildLiveDay(
       maariv:exact("maariv").join(" · ") || undefined,
       shulScheduleRows:rows,
       event:isGenericSpecialTitle(specialDay.title) ? undefined : (specialDay.title || undefined)
+    };
+  }
+
+  if(specialRequirement?.blocks_regular_schedule){
+    return {
+      ...base,
+      event:specialRequirement.title,
+      shulScheduleRows:[{
+        label:"Special schedule not set",
+        time:undefined,
+        note:specialRequirement.title
+      }]
     };
   }
 
@@ -395,6 +456,11 @@ export default function App() {
   const [scheduleEntries,setScheduleEntries] = useState<LiveScheduleEntry[]>([]);
   const [specialDay,setSpecialDay] = useState<SpecialScheduleDay|undefined>();
   const [specialEntries,setSpecialEntries] = useState<SpecialScheduleEntry[]>([]);
+  const [todayOverrides,setTodayOverrides] = useState<ScheduleOverrideRow[]>([]);
+  const [specialCalendarEvents,setSpecialCalendarEvents] = useState<HebcalSpecialEvent[]>([]);
+  const [specialSetupAlerts,setSpecialSetupAlerts] = useState<SpecialSetupAlert[]>([]);
+  const [specialStatusVersion,setSpecialStatusVersion] = useState(0);
+  const [calendarFocusDate,setCalendarFocusDate] = useState("");
   const [pushesUsed,setPushesUsed] = useState(0);
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
@@ -407,9 +473,23 @@ export default function App() {
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
   const healthyDevices = activeDevices.filter(d=>String(d.status).toLowerCase()==="healthy");
+  const todaySpecialRequirement=useMemo(()=>{
+    const today=localIsoDate();
+    return specialCalendarEvents.find(event=>event.date===today&&event.blocks_regular_schedule);
+  },[specialCalendarEvents]);
+
   const livePreviewDay=useMemo(
-    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes),zmanimRows:liveZmanimRows}),
-    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes,liveZmanimRows]
+    ()=>({...buildLiveDay(
+      scheduleEntries,
+      specialDay,
+      specialEntries,
+      liveZmanim,
+      zmanDefaults,
+      shabbosEndMinutes,
+      todayOverrides,
+      todaySpecialRequirement
+    ),zmanimRows:liveZmanimRows}),
+    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes,todayOverrides,todaySpecialRequirement,liveZmanimRows]
   );
 
   useEffect(()=>{
@@ -484,6 +564,128 @@ export default function App() {
 
     return()=>{cancelled=true;};
   },[tab,postalCode,countryCode,myzmanimLocationId,currentShulId,zmanDefaults,scheduleEntries]);
+
+  useEffect(()=>{
+    if(!authReady||!currentShulId)return;
+
+    let cancelled=false;
+
+    async function loadSpecialSetupStatus(){
+      const todayDate=new Date();
+      const today=localIsoDate(todayDate);
+      const end=new Date(todayDate);
+      end.setDate(end.getDate()+60);
+      const endDate=localIsoDate(end);
+
+      const {data:calendarData,error:calendarError}=await supabase.functions.invoke("hebcal-calendar",{
+        body:{
+          start_date:today,
+          end_date:endDate,
+          country_code:countryCode
+        }
+      });
+
+      if(cancelled)return;
+
+      if(calendarError||!calendarData?.success){
+        setSpecialCalendarEvents([]);
+        setSpecialSetupAlerts([]);
+        return;
+      }
+
+      const events=(calendarData.events||[]) as HebcalSpecialEvent[];
+      setSpecialCalendarEvents(events);
+
+      const [daysRes,entriesRes,overridesRes]=await Promise.all([
+        supabase.from("special_schedule_days")
+          .select("event_date,replace_normal_schedule")
+          .eq("shul_id",currentShulId)
+          .gte("event_date",today)
+          .lte("event_date",endDate),
+        supabase.from("special_schedule_entries")
+          .select("event_date")
+          .eq("shul_id",currentShulId)
+          .eq("active",true)
+          .gte("event_date",today)
+          .lte("event_date",endDate),
+        supabase.from("schedule_overrides")
+          .select("event_date")
+          .eq("shul_id",currentShulId)
+          .eq("active",true)
+          .gte("event_date",today)
+          .lte("event_date",endDate)
+      ]);
+
+      if(cancelled)return;
+      if(daysRes.error||entriesRes.error||overridesRes.error)return;
+
+      const dayMap=new Map((daysRes.data||[]).map(row=>[String(row.event_date),row]));
+      const entryCounts=new Map<string,number>();
+      for(const row of entriesRes.data||[]){
+        const key=String(row.event_date);
+        entryCounts.set(key,(entryCounts.get(key)||0)+1);
+      }
+      const overrideCounts=new Map<string,number>();
+      for(const row of overridesRes.data||[]){
+        const key=String(row.event_date);
+        overrideCounts.set(key,(overrideCounts.get(key)||0)+1);
+      }
+
+      const configured=(date:string)=>{
+        if((overrideCounts.get(date)||0)>0)return true;
+        const day:any=dayMap.get(date);
+        if(!day)return false;
+        if(day.replace_normal_schedule===false)return true;
+        return (entryCounts.get(date)||0)>0;
+      };
+
+      const groups=new Map<string,HebcalSpecialEvent[]>();
+      for(const event of events.filter(event=>event.requires_confirmation)){
+        groups.set(event.group_key,[...(groups.get(event.group_key)||[]),event]);
+      }
+
+      const alerts:SpecialSetupAlert[]=[];
+      for(const [groupKey,groupEvents] of groups){
+        const sorted=groupEvents.slice().sort((a,b)=>a.date.localeCompare(b.date));
+        const missing=sorted.filter(event=>!configured(event.date));
+        if(!missing.length)continue;
+
+        const firstDate=sorted[0].date;
+        const leadDays=Math.max(...sorted.map(event=>event.lead_days||0));
+        const alertDateObj=new Date(firstDate+"T12:00:00");
+        alertDateObj.setDate(alertDateObj.getDate()-leadDays);
+        const alertDate=localIsoDate(alertDateObj);
+
+        const currentMissing=missing.find(event=>event.date===today);
+        if(today<alertDate&&!currentMissing)continue;
+
+        const nextMissing=missing.find(event=>event.date>=today)||missing[0];
+        const dayDiff=Math.round(
+          (new Date(nextMissing.date+"T12:00:00").getTime()-new Date(today+"T12:00:00").getTime())/86400000
+        );
+
+        alerts.push({
+          groupKey,
+          label:sorted[0].group_label,
+          firstDate,
+          nextMissingDate:nextMissing.date,
+          missingCount:missing.length,
+          totalCount:sorted.length,
+          daysUntil:dayDiff,
+          urgent:Boolean(currentMissing)||dayDiff<=7
+        });
+      }
+
+      alerts.sort((a,b)=>{
+        if(a.urgent!==b.urgent)return a.urgent?-1:1;
+        return a.nextMissingDate.localeCompare(b.nextMissingDate);
+      });
+      setSpecialSetupAlerts(alerts);
+    }
+
+    void loadSpecialSetupStatus();
+    return()=>{cancelled=true;};
+  },[authReady,currentShulId,countryCode,specialStatusVersion]);
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
@@ -560,7 +762,7 @@ export default function App() {
     async function loadLiveData(){
       setLoading(true); setLoadError("");
       const today = localIsoDate();
-      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes,zmanimSettingsRes] = await Promise.all([
+      const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes,todayOverridesRes,zmanimSettingsRes] = await Promise.all([
         supabase.from("shuls").select("id,name,country_code,postal_code,timezone").eq("id",currentShulId).maybeSingle(),
         supabase.from("magnets").select("*").eq("shul_id",currentShulId).order("device_code"),
         supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
@@ -568,10 +770,11 @@ export default function App() {
         supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
         supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
         supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
+        supabase.from("schedule_overrides").select("event_date,service_type,service_time,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
         supabase.from("zmanim_settings").select("myzmanim_location_id,zman_defaults,shabbos_yom_tov_end_minutes").eq("shul_id",currentShulId).maybeSingle()
       ]);
       if(cancelled) return;
-      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error || zmanimSettingsRes.error;
+      const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error || todayOverridesRes.error || zmanimSettingsRes.error;
       if(firstError){
         setLoadError(firstError.message);
       } else if(!shulRes.data){
@@ -596,6 +799,7 @@ export default function App() {
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
         setSpecialDay((specialDayRes.data || undefined) as SpecialScheduleDay|undefined);
         setSpecialEntries((specialEntryRes.data || []) as SpecialScheduleEntry[]);
+        setTodayOverrides((todayOverridesRes.data || []) as ScheduleOverrideRow[]);
         setPushesUsed(pushRes.count || 0);
       }
       setLoading(false);
@@ -606,8 +810,18 @@ export default function App() {
       .on("postgres_changes",{event:"*",schema:"public",table:"magnets",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
       .on("postgres_changes",{event:"*",schema:"public",table:"notices_events",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
       .on("postgres_changes",{event:"*",schema:"public",table:"schedule_entries",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_days",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_entries",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_days",filter:`shul_id=eq.${currentShulId}`},()=>{
+        loadLiveData();
+        setSpecialStatusVersion(v=>v+1);
+      })
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_entries",filter:`shul_id=eq.${currentShulId}`},()=>{
+        loadLiveData();
+        setSpecialStatusVersion(v=>v+1);
+      })
+      .on("postgres_changes",{event:"*",schema:"public",table:"schedule_overrides",filter:`shul_id=eq.${currentShulId}`},()=>{
+        loadLiveData();
+        setSpecialStatusVersion(v=>v+1);
+      })
       .subscribe();
 
     return ()=>{cancelled=true; supabase.removeChannel(channel);};
@@ -650,12 +864,18 @@ export default function App() {
             previewDay={livePreviewDay}
             notices={notices}
             remainingPushes={remainingPushes}
-            onGoCalendar={() => setTab("calendar")}
+            onGoCalendar={() => {setCalendarFocusDate("");setTab("calendar");}}
+            onOpenSpecialSetup={(date)=>{
+              setCalendarFocusDate(date);
+              setTab("calendar");
+            }}
             onAddNotice={() => setTab("notices")}
             shulName={shulName}
             activeMagnets={activeDevices.length}
             healthyMagnets={healthyDevices.length}
             scheduleEntries={scheduleEntries}
+            specialSetupAlerts={specialSetupAlerts}
+            todaySpecialRequirement={todaySpecialRequirement}
             loading={loading}
           />
         )}
@@ -670,6 +890,7 @@ export default function App() {
             countryCode={countryCode}
             locationId={myzmanimLocationId}
             shulId={currentShulId}
+            focusDate={calendarFocusDate}
           />
         )}
 
