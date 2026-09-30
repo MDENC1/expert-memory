@@ -9,7 +9,17 @@ type Props = {
 
 type Service = "Shacharis" | "Mincha" | "Maariv";
 type RuleMode = "fixed" | "zman" | "follows" | "none";
-type ZmanSource = "plag" | "sunset";
+type ZmanSource =
+  | "plag" | "sunset"
+  | "dawn_72" | "dawn_72fix"
+  | "sunrise_default"
+  | "shema_gra" | "shema_benish_shabbos" | "shema_ma72fix"
+  | "midday"
+  | "mincha_gra" | "mincha_ma72fix"
+  | "ketana_gra" | "ketana_ma72fix"
+  | "plag_gra" | "plag_benish_shabbos" | "plag_ma72fix"
+  | "sunset_default"
+  | "night_shabbos" | "night_72fix" | "night_gra180" | "night_gra225" | "night_gra240";
 type RoundMode = "exact" | "earlier" | "later";
 type GroupPeriod = "individual" | "week_earliest" | "month_earliest";
 
@@ -39,6 +49,71 @@ const DAYS=[
 ] as const;
 
 const SERVICES:Service[]=["Shacharis","Mincha","Maariv"];
+
+type ZmanFamilyOption = {
+  key:string;
+  label:string;
+  methods:Array<{key:ZmanSource;label:string}>;
+};
+
+const ZMAN_OPTIONS:Record<Service,ZmanFamilyOption[]>={
+  Shacharis:[
+    {key:"dawn",label:"Alos / Dawn",methods:[
+      {key:"dawn_72",label:"72 min as degrees (16.1°)"},
+      {key:"dawn_72fix",label:"Fixed 72 minutes"}
+    ]},
+    {key:"sunrise",label:"Sunrise / Netz",methods:[
+      {key:"sunrise_default",label:"MyZmanim standard"}
+    ]},
+    {key:"shema",label:"Latest Shema",methods:[
+      {key:"shema_gra",label:"GRA / Baal HaTanya"},
+      {key:"shema_benish_shabbos",label:"Ben Ish"},
+      {key:"shema_ma72fix",label:"Magen Avraham · fixed 72 min"}
+    ]},
+    {key:"midday",label:"Chatzos / Midday",methods:[
+      {key:"midday",label:"MyZmanim standard"}
+    ]}
+  ],
+  Mincha:[
+    {key:"mincha_gedolah",label:"Earliest Mincha / Mincha Gedolah",methods:[
+      {key:"mincha_gra",label:"GRA"},
+      {key:"mincha_ma72fix",label:"Magen Avraham · fixed 72 min"}
+    ]},
+    {key:"mincha_ketana",label:"Mincha Ketana",methods:[
+      {key:"ketana_gra",label:"GRA"},
+      {key:"ketana_ma72fix",label:"Magen Avraham · fixed 72 min"}
+    ]},
+    {key:"plag",label:"Plag HaMincha",methods:[
+      {key:"plag_gra",label:"GRA / Baal HaTanya"},
+      {key:"plag_benish_shabbos",label:"Ben Ish"},
+      {key:"plag_ma72fix",label:"Magen Avraham · fixed 72 min"}
+    ]},
+    {key:"sunset",label:"Sunset / Shkia",methods:[
+      {key:"sunset_default",label:"MyZmanim standard"}
+    ]}
+  ],
+  Maariv:[
+    {key:"nightfall",label:"Nightfall / Tzeis",methods:[
+      {key:"night_shabbos",label:"MyZmanim Shabbos nightfall"},
+      {key:"night_72fix",label:"Rabbeinu Tam · fixed 72 min"},
+      {key:"night_gra180",label:"GRA · MyZmanim NightGra180"},
+      {key:"night_gra225",label:"GRA · MyZmanim NightGra225"},
+      {key:"night_gra240",label:"GRA · MyZmanim NightGra240"}
+    ]}
+  ]
+};
+
+function familyForSource(service:Service,source:ZmanSource){
+  return ZMAN_OPTIONS[service].find(f=>f.methods.some(m=>m.key===source)) || ZMAN_OPTIONS[service][0];
+}
+
+function methodLabel(service:Service,source:ZmanSource){
+  for(const family of ZMAN_OPTIONS[service]){
+    const method=family.methods.find(item=>item.key===source);
+    if(method)return method.label;
+  }
+  return source;
+}
 const pad=(n:number)=>String(n).padStart(2,"0");
 const newId=()=>`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
@@ -91,17 +166,17 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"early-mincha",service:"Mincha",name:"Early Mincha",days:[0,1,2,3,4],
-    mode:"zman",fixedTime:"",source:"plag",offset:10,direction:"before",
+    mode:"zman",fixedTime:"",source:"plag_gra",offset:10,direction:"before",
     roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
   },
   {
     id:"late-mincha",service:"Mincha",name:"Late Mincha",days:[0,1,2,3,4],
-    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
     roundMode:"earlier",groupPeriod:"week_earliest",followsText:""
   },
   {
     id:"friday-mincha",service:"Mincha",name:"Friday Mincha",days:[5],
-    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
     roundMode:"earlier",groupPeriod:"individual",followsText:""
   },
   {
@@ -111,12 +186,12 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"shabbos-late-mincha",service:"Mincha",name:"Shabbos Late Mincha",days:[6],
-    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
     roundMode:"earlier",groupPeriod:"individual",followsText:""
   },
   {
     id:"weekday-maariv",service:"Maariv",name:"Weekday Maariv",days:[0,1,2,3,4,5],
-    mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
+    mode:"follows",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   },
   {
@@ -137,7 +212,7 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
   if(service==="Mincha"){
     return {
       id:newId(),service,name:`Mincha Minyan ${index}`,days:[],
-      mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+      mode:"zman",fixedTime:"",source:"sunset_default",offset:10,direction:"before",
       roundMode:"earlier",groupPeriod:"individual",followsText:""
     };
   }
@@ -148,8 +223,9 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
   };
 }
 
-function sourceLabel(source:ZmanSource){
-  return source==="plag" ? "Plag" : "Sunset (Shkia)";
+function sourceLabel(service:Service,source:ZmanSource){
+  const family=familyForSource(service,source);
+  return `${family.label} · ${methodLabel(service,source)}`;
 }
 
 export default function OnboardingPage({onCancel,onComplete}:Props){
@@ -165,6 +241,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   const [country,setCountry]=useState("US");
   const [zip,setZip]=useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes]=useState(60);
+  const [shabbosEndPreset,setShabbosEndPreset]=useState<"42"|"60"|"72"|"manual">("60");
   const [rules,setRules]=useState<MinyanRule[]>(initialRules);
 
   useEffect(()=>{
@@ -398,9 +475,27 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               </label>
               <label>
                 <span>Zman</span>
-                <select value={rule.source} onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}>
-                  <option value="plag">Plag</option>
-                  <option value="sunset">Sunset (Shkia)</option>
+                <select
+                  value={familyForSource(rule.service,rule.source).key}
+                  onChange={e=>{
+                    const family=ZMAN_OPTIONS[rule.service].find(item=>item.key===e.target.value)!;
+                    patchRule(rule.id,{source:family.methods[0].key});
+                  }}
+                >
+                  {ZMAN_OPTIONS[rule.service].map(family=>(
+                    <option key={family.key} value={family.key}>{family.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Calculation</span>
+                <select
+                  value={rule.source}
+                  onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}
+                >
+                  {familyForSource(rule.service,rule.source).methods.map(method=>(
+                    <option key={method.key} value={method.key}>{method.label}</option>
+                  ))}
                 </select>
               </label>
             </>
@@ -423,10 +518,11 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
             <label>
               <span>5-minute rounding</span>
               <select value={rule.roundMode} onChange={e=>patchRule(rule.id,{roundMode:e.target.value as RoundMode})}>
-                <option value="exact">Exact zman calculation</option>
-                <option value="earlier">Round earlier to 5 minutes</option>
-                <option value="later">Round later to 5 minutes</option>
+                <option value="exact">Exact calculated time (9:13 → 9:13)</option>
+                <option value="earlier">Round to prior 5-min increment (9:13 → 9:10)</option>
+                <option value="later">Round to next 5-min increment (9:13 → 9:15)</option>
               </select>
+              <small>This rounds the final result to a 5-minute clock increment; it does not add or subtract another 5 minutes.</small>
             </label>
             {rule.days.length>1&&(
               <label>
@@ -444,7 +540,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
         <div className="ruleSentence">
           {rule.mode==="fixed"&&<span>{rule.fixedTime || "Set a time"}</span>}
-          {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {sourceLabel(rule.source)}</span>}
+          {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {sourceLabel(rule.service,rule.source)}</span>}
           {rule.mode==="follows"&&<span>{rule.followsText||"Follows Mincha"}</span>}
           {rule.mode==="none"&&<span>NO MINYAN</span>}
         </div>
@@ -535,9 +631,26 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               </label>
               <label className="onboardField">
                 <span>Shabbos / Yom Tov ends</span>
-                <div className="minutesSetting">
-                  <input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/>
-                  <b>minutes after sunset</b>
+                <div className="endTimeSetting">
+                  <select
+                    value={shabbosEndPreset}
+                    onChange={e=>{
+                      const value=e.target.value as "42"|"60"|"72"|"manual";
+                      setShabbosEndPreset(value);
+                      if(value!=="manual")setShabbosEndMinutes(Number(value));
+                    }}
+                  >
+                    <option value="42">42 minutes after sunset</option>
+                    <option value="60">60 minutes after sunset</option>
+                    <option value="72">72 minutes after sunset</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                  {shabbosEndPreset==="manual"&&(
+                    <div className="manualEndMinutes">
+                      <input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/>
+                      <b>minutes</b>
+                    </div>
+                  )}
                 </div>
               </label>
             </div>
