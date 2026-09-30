@@ -33,7 +33,7 @@ export default function Dashboard({
   notices: Notice[];
   remainingPushes: number;
   onGoCalendar: () => void;
-  onOpenSpecialSetup: (date:string) => void;
+  onOpenSpecialSetup: (groupKey:string) => void;
   onAddNotice: () => void;
   shulName:string;
   activeMagnets:number;
@@ -90,7 +90,7 @@ export default function Dashboard({
                     {" · "}{shortDate(alert.nextMissingDate)}
                   </span>
                 </div>
-                <button className="primary" onClick={()=>onOpenSpecialSetup(alert.nextMissingDate)}>Set Times</button>
+                <button className="primary" onClick={()=>onOpenSpecialSetup(alert.groupKey)}>Set Times</button>
               </div>
             ))}
             {todaySpecialRequirement&&!specialSetupAlerts.some(alert=>alert.nextMissingDate===todaySpecialRequirement.date)&&(
@@ -99,7 +99,7 @@ export default function Dashboard({
                   <strong>{todaySpecialRequirement.title}</strong>
                   <span>Today's schedule needs to be set before the regular schedule can be used.</span>
                 </div>
-                <button className="primary" onClick={()=>onOpenSpecialSetup(todaySpecialRequirement.date)}>Set Today's Times</button>
+                <button className="primary" onClick={()=>onOpenSpecialSetup(todaySpecialRequirement.group_key)}>Set Today's Times</button>
               </div>
             )}
           </div>
