@@ -29,6 +29,7 @@ type SpecialDay = {
   event_date: string;
   title: string | null;
   replace_normal_schedule: boolean;
+  confirmed_at: string | null;
 };
 
 type SpecialEntry = {
@@ -231,6 +232,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [daySaveMessage,setDaySaveMessage] = useState("");
   const [bulkEditRows,setBulkEditRows] = useState<BulkEditRow[]>([]);
   const [bulkSaveMessage,setBulkSaveMessage] = useState("");
+  const [draftingSpecialDate,setDraftingSpecialDate] = useState("");
 
   useEffect(()=>{
     setSelected([]);
@@ -275,7 +277,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
       const supabasePromise=Promise.all([
         supabase.from("special_schedule_days")
-          .select("event_date,title,replace_normal_schedule")
+          .select("event_date,title,replace_normal_schedule,confirmed_at")
           .eq("shul_id",shulId)
           .gte("event_date",startDate)
           .lte("event_date",endDate)
@@ -448,7 +450,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const dateHasConfiguredSpecialSchedule=(date:string)=>{
     if((overrideMap.get(date)||[]).length>0)return true;
     const day=dayMap.get(date);
-    if(!day)return false;
+    if(!day||!day.confirmed_at)return false;
     if(day.replace_normal_schedule===false)return true;
     return (entriesMap.get(date)||[]).length>0;
   };
@@ -741,27 +743,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     return resolved || "Timing unavailable";
   };
 
-  const rowsForDate=(date:string)=>{
+  const regularRowsForDate=(date:string)=>{
     const d=new Date(`${date}T12:00:00`);
-    const manual=overrideMap.get(date)||[];
-    if(manual.length){
-      return manual.map(r=>({
-        label:r.service_type,
-        time:r.service_time?prettyTime(r.service_time):"",
-        note:""
-      }));
-    }
-    const special=dayMap.get(date);
-    const rows=entriesMap.get(date)||[];
-    if(special?.replace_normal_schedule&&rows.length){
-      return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
-    }
-
-    // Hebcal owns the Jewish calendar/date classification. If this date
-    // requires a special schedule and the shul has not configured one,
-    // never silently fall back to the regular weekly schedule.
-    if(blockingHebcalEvent(date))return [];
-
     const dayRules=scheduleEntries.filter(r=>r.day_of_week===d.getDay());
     const maarivFollowsMincha=dayRules.some(r=>
       (r.service_type||"").toLowerCase()==="maariv" && r.timing_source==="follows"
@@ -779,6 +762,30 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       });
   };
 
+  const rowsForDate=(date:string)=>{
+    const manual=overrideMap.get(date)||[];
+    if(manual.length){
+      return manual.map(r=>({
+        label:r.service_type,
+        time:r.service_time?prettyTime(r.service_time):"",
+        note:""
+      }));
+    }
+
+    const special=dayMap.get(date);
+    const rows=entriesMap.get(date)||[];
+    if(special?.replace_normal_schedule&&special.confirmed_at&&rows.length){
+      return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
+    }
+
+    // Hebcal owns the Jewish calendar/date classification. If this date
+    // requires a special schedule and it is not explicitly confirmed,
+    // never silently fall back to the regular weekly schedule.
+    if(blockingHebcalEvent(date))return [];
+
+    return regularRowsForDate(date);
+  };
+
   const selectedDay=selected.length===1 ? selected[0] : undefined;
   const selectedCell=selectedDay ? monthCells.find(c=>c.date===selectedDay) : undefined;
   const selectedRows=selectedDay ? rowsForDate(selectedDay) : [];
@@ -791,16 +798,18 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   useEffect(()=>{
     if(!selectedDay){
       setEditRows([]);
+      setDraftingSpecialDate("");
       setDaySaveMessage("");
       return;
     }
+    setDraftingSpecialDate("");
     setEditRows(selectedRows.map(r=>({
       label:r.label,
       timeText:r.time,
       note:r.note||""
     })));
     setDaySaveMessage("");
-  },[selectedDay,overrides,specialEntries,zmanim,scheduleEntries]);
+  },[selectedDay,overrides,specialEntries,specialDays,zmanim,scheduleEntries,hebcalEvents]);
 
   useEffect(()=>{
     if(selected.length<=1){
@@ -953,11 +962,119 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setSavingDay(false);
   };
 
+  const startSpecialScheduleDraft=()=>{
+    if(!selectedDay||!selectedBlockingEvent)return;
+    const startingRows=regularRowsForDate(selectedDay).map(row=>({
+      label:row.label,
+      timeText:row.time,
+      note:row.note||""
+    }));
+
+    const fallback:EditRow[]=[
+      {label:"Shacharis",timeText:"",note:""},
+      {label:"Mincha",timeText:"",note:""},
+      {label:"Maariv",timeText:"",note:""}
+    ];
+
+    setEditRows(startingRows.length?startingRows:fallback);
+    setDraftingSpecialDate(selectedDay);
+    setDaySaveMessage("Starting from the regular schedule for this weekday. Review every time, then confirm the special schedule.");
+  };
+
   const saveSelectedDayTimes=async(rowsToSave:EditRow[]=editRows)=>{
     if(!selectedDay||!rowsToSave.length)return;
     setSavingDay(true);
     setDaySaveMessage("");
     setError("");
+
+    if(selectedBlockingEvent){
+      const normalizedRows=rowsToSave.map(row=>({
+        ...row,
+        time24:displayTimeTo24(row.timeText)||null
+      }));
+
+      const {data:{session}}=await supabase.auth.getSession();
+      const confirmedBy=session?.user?.id||null;
+
+      const clearOverrideRes=await supabase.from("schedule_overrides")
+        .delete()
+        .eq("shul_id",shulId)
+        .eq("event_date",selectedDay);
+
+      if(clearOverrideRes.error){
+        setError(clearOverrideRes.error.message);
+        setSavingDay(false);
+        return;
+      }
+
+      const deleteEntriesRes=await supabase.from("special_schedule_entries")
+        .delete()
+        .eq("shul_id",shulId)
+        .eq("event_date",selectedDay);
+
+      if(deleteEntriesRes.error){
+        setError(deleteEntriesRes.error.message);
+        setSavingDay(false);
+        return;
+      }
+
+      const {data:dayData,error:dayError}=await supabase.from("special_schedule_days")
+        .upsert({
+          shul_id:shulId,
+          event_date:selectedDay,
+          title:selectedBlockingEvent.title,
+          replace_normal_schedule:true,
+          confirmed_at:new Date().toISOString(),
+          confirmed_by:confirmedBy
+        },{onConflict:"shul_id,event_date"})
+        .select("event_date,title,replace_normal_schedule,confirmed_at")
+        .single();
+
+      if(dayError){
+        setError(dayError.message);
+        setSavingDay(false);
+        return;
+      }
+
+      const payload=normalizedRows.map((row,index)=>({
+        shul_id:shulId,
+        event_date:selectedDay,
+        title:row.label,
+        event_time:row.time24,
+        approximate:false,
+        note:row.note||null,
+        sort_order:(index+1)*10,
+        active:true
+      }));
+
+      const {data:entryData,error:entryError}=await supabase.from("special_schedule_entries")
+        .insert(payload)
+        .select("event_date,title,event_time,approximate,note,sort_order");
+
+      if(entryError){
+        setError(entryError.message);
+        setSavingDay(false);
+        return;
+      }
+
+      setOverrides(prev=>prev.filter(row=>row.event_date!==selectedDay));
+      setSpecialDays(prev=>[
+        ...prev.filter(row=>row.event_date!==selectedDay),
+        dayData as SpecialDay
+      ]);
+      setSpecialEntries(prev=>[
+        ...prev.filter(row=>row.event_date!==selectedDay),
+        ...((entryData||[]) as SpecialEntry[])
+      ]);
+      setEditRows(normalizedRows.map(({time24,...row})=>({
+        ...row,
+        timeText:row.timeText.trim()?normalizeDisplayTime(row.timeText):row.timeText
+      })));
+      setDraftingSpecialDate("");
+      setDaySaveMessage(`${selectedBlockingEvent.title} special schedule confirmed. The dashboard reminder will clear for this date.`);
+      setSavingDay(false);
+      return;
+    }
 
     const deleteRes=await supabase.from("schedule_overrides")
       .delete()
@@ -1126,7 +1243,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 {editRows.length===0 && selectedDay && selectedBlockingEvent && (
                   <div className="yomTovScheduleMissing">
                     <b>{selectedBlockingEvent.title} supersedes the regular schedule.</b>
-                    <span>No special davening schedule is configured for this date yet. The regular weekly schedule is intentionally being withheld as a safety net.</span>
+                    <span>No confirmed special davening schedule is configured for this date. The regular weekly schedule is intentionally being withheld as a safety net.</span>
+                    <button className="primary" onClick={startSpecialScheduleDraft}>Set Special Schedule</button>
                   </div>
                 )}
                 <div className="selectedDayEditList">
@@ -1160,8 +1278,18 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   ))}
                 </div>
                 <div className="selectedDayActions">
-                  <button className="primary" disabled={savingDay} onClick={()=>saveSelectedDayTimes()}>{savingDay?"Saving...":"Save Times for This Day Only"}</button>
-                  {selectedHasManualOverride&&<button className="secondary" disabled={savingDay} onClick={resetSelectedDayTimes}>Use Normal Rule Again</button>}
+                  {editRows.length>0&&(
+                    <button className="primary" disabled={savingDay} onClick={()=>saveSelectedDayTimes()}>
+                      {savingDay
+                        ?"Saving..."
+                        :selectedBlockingEvent
+                          ?"Confirm Special Schedule"
+                          :"Save Times for This Day Only"}
+                    </button>
+                  )}
+                  {!selectedBlockingEvent&&selectedHasManualOverride&&(
+                    <button className="secondary" disabled={savingDay} onClick={resetSelectedDayTimes}>Use Normal Rule Again</button>
+                  )}
                 </div>
                 {daySaveMessage&&<div className="daySaveMessage">{daySaveMessage}</div>}
                 <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
