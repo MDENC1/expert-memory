@@ -117,6 +117,7 @@ function sourceFromShulDefault(family:string,defaults:ZmanDefaults){
     if(defaults.nightfall==="rt72")return "night_72fix";
     return "night_gra180";
   }
+  if(family==="shabbos_end")return "shabbos_end";
   return "";
 }
 
@@ -178,15 +179,17 @@ function resolvePreviewScheduleRuleTime(
   rule:LiveScheduleEntry,
   schedule:LiveScheduleEntry[],
   zmanim:PreviewZmanimBatch,
-  defaults:ZmanDefaults
+  defaults:ZmanDefaults,
+  shabbosEndMinutes:number
 ){
   const source=(rule.use_shul_zman_default&&rule.zman_family)
     ? sourceFromShulDefault(rule.zman_family,defaults)
     : (rule.timing_source||"");
 
+  const isShabbosEnd=source==="shabbos_end";
   const map=source==="plag"
     ? zmanim.plagHaMincha
-    : source==="sunset"
+    : source==="sunset" || isShabbosEnd
       ? zmanim.sunset
       : zmanim.sources?.[source];
 
@@ -223,7 +226,7 @@ function resolvePreviewScheduleRuleTime(
   const targets=candidateDates
     .map(key=>timeMinutesFromIso(map[key]))
     .filter((value):value is number=>value!==null)
-    .map(value=>value+(rule.timing_offset_minutes||0));
+    .map(value=>value+(isShabbosEnd?shabbosEndMinutes:0)+(rule.timing_offset_minutes||0));
 
   if(!targets.length)return "";
   const raw=period==="individual" ? targets[0] : Math.min(...targets);
@@ -308,7 +311,8 @@ function buildLiveDay(
   specialDay:SpecialScheduleDay|undefined,
   specialEntries:SpecialScheduleEntry[],
   zmanim:PreviewZmanimBatch,
-  zmanDefaults:ZmanDefaults
+  zmanDefaults:ZmanDefaults,
+  shabbosEndMinutes:number
 ):CalendarDay {
   const now=new Date();
   const today=localIsoDate(now);
@@ -357,7 +361,7 @@ function buildLiveDay(
     if(r.service_time)return prettyTime(r.service_time);
     if(r.timing_source==="none")return "NO MINYAN";
     if(r.timing_source==="follows")return r.follows_text || "Follows Mincha";
-    return resolvePreviewScheduleRuleTime(today,r,schedule,zmanim,zmanDefaults) || "Unavailable";
+    return resolvePreviewScheduleRuleTime(today,r,schedule,zmanim,zmanDefaults,shabbosEndMinutes) || "Unavailable";
   };
 
   const rows=todayRules
@@ -397,14 +401,15 @@ export default function App() {
   const [liveZmanim,setLiveZmanim] = useState<PreviewZmanimBatch>({});
   const [liveZmanimRows,setLiveZmanimRows] = useState<Array<{label:string;time:string}>>([]);
   const [zmanDefaults,setZmanDefaults] = useState<ZmanDefaults>(DEFAULT_ZMAN_DEFAULTS);
+  const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
   const [dataVersion,setDataVersion] = useState(0);
 
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
   const healthyDevices = activeDevices.filter(d=>String(d.status).toLowerCase()==="healthy");
   const livePreviewDay=useMemo(
-    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults),zmanimRows:liveZmanimRows}),
-    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,liveZmanimRows]
+    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes),zmanimRows:liveZmanimRows}),
+    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes,liveZmanimRows]
   );
 
   useEffect(()=>{
@@ -563,7 +568,7 @@ export default function App() {
         supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
         supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
         supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order"),
-        supabase.from("zmanim_settings").select("myzmanim_location_id,zman_defaults").eq("shul_id",currentShulId).maybeSingle()
+        supabase.from("zmanim_settings").select("myzmanim_location_id,zman_defaults,shabbos_yom_tov_end_minutes").eq("shul_id",currentShulId).maybeSingle()
       ]);
       if(cancelled) return;
       const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error || zmanimSettingsRes.error;
@@ -585,6 +590,7 @@ export default function App() {
           ...DEFAULT_ZMAN_DEFAULTS,
           ...((zmanimSettingsRes.data?.zman_defaults||{}) as Partial<ZmanDefaults>)
         });
+        setShabbosEndMinutes(Number(zmanimSettingsRes.data?.shabbos_yom_tov_end_minutes||60));
         setDevices((deviceRes.data || []) as LiveDevice[]);
         setNotices((noticeRes.data || []).map(mapNotice));
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
