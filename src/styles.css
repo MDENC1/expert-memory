@@ -943,3 +943,17 @@ body{color:#172b26}
 @media(max-width:760px){
   .onboardGrid.fourBasics,.ruleSelectOptions{grid-template-columns:1fr}
 }
+
+/* Live MyZmanim rows in the magnet preview */
+.epZmanimRows{display:grid;gap:3px;padding-top:2px}
+.epZmanimRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:baseline;border-bottom:1px solid #d6d6d6;padding:2px 0}
+.epZmanimRow:last-child{border-bottom:0}
+.epZmanimRow b{font-size:10px;line-height:1.05;font-weight:900}
+.epZmanimRow strong{font-size:11px;line-height:1.05;font-weight:900;white-space:nowrap}
+
+/* Shabbos/Yom Tov end presets */
+.endTimeSetting{display:grid;gap:6px}
+.endTimeSetting>select{width:100%}
+.manualEndMinutes{display:flex;align-items:center;gap:7px}
+.manualEndMinutes input{width:78px!important}
+.manualEndMinutes b{font-size:10px;color:#52655f}
