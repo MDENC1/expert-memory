@@ -462,6 +462,7 @@ export default function App() {
   const [specialSetupAlerts,setSpecialSetupAlerts] = useState<SpecialSetupAlert[]>([]);
   const [specialStatusVersion,setSpecialStatusVersion] = useState(0);
   const [calendarFocusDate,setCalendarFocusDate] = useState("");
+  const [monthlyFocusGroup,setMonthlyFocusGroup] = useState("");
   const [pushesUsed,setPushesUsed] = useState(0);
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
@@ -843,7 +844,14 @@ export default function App() {
 
         <nav>
           {nav.map(([id, label, Icon]) => (
-            <button key={id} className={tab === id ? "navBtn active" : "navBtn"} onClick={() => setTab(id)}>
+            <button
+              key={id}
+              className={tab === id ? "navBtn active" : "navBtn"}
+              onClick={() => {
+                if(id==="monthly")setMonthlyFocusGroup("");
+                setTab(id);
+              }}
+            >
               <Icon size={18} /> {label}
             </button>
           ))}
@@ -866,9 +874,9 @@ export default function App() {
             notices={notices}
             remainingPushes={remainingPushes}
             onGoCalendar={() => {setCalendarFocusDate("");setTab("calendar");}}
-            onOpenSpecialSetup={(date)=>{
-              setCalendarFocusDate(date);
-              setTab("calendar");
+            onOpenSpecialSetup={(groupKey)=>{
+              setMonthlyFocusGroup(groupKey);
+              setTab("monthly");
             }}
             onAddNotice={() => setTab("notices")}
             shulName={shulName}
@@ -895,7 +903,17 @@ export default function App() {
           />
         )}
 
-        {tab === "monthly" && <MonthlySetupPage days={calendarDays} setDays={setCalendarDays} />}
+        {tab === "monthly" && (
+          <MonthlySetupPage
+            days={calendarDays}
+            setDays={setCalendarDays}
+            shulId={currentShulId}
+            specialCalendarEvents={specialCalendarEvents}
+            focusGroup={monthlyFocusGroup}
+            onClearFocus={()=>setMonthlyFocusGroup("")}
+            onSpecialSchedulesChanged={()=>setSpecialStatusVersion(v=>v+1)}
+          />
+        )}
 
         {tab === "notices" && (
           <NoticesPage
