@@ -1067,3 +1067,60 @@ body{color:#172b26}
   grid-row:3;
   margin:0;
 }
+
+/* Shul-wide zmanim defaults: compact, aligned, and overridable per minyan */
+.zmanDefaultsBlock{
+  margin-top:16px;
+  padding-top:14px;
+  border-top:1px solid #e6eeeb;
+}
+.zmanDefaultsHead{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:10px;
+}
+.zmanDefaultsHead h3{
+  margin:0 0 3px;
+  font-size:14px;
+  color:#213e35;
+}
+.zmanDefaultsHead p{
+  margin:0;
+  font-size:10px;
+  line-height:1.35;
+  color:#71817b;
+}
+.zmanDefaultsGrid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:10px;
+  align-items:start;
+}
+.zmanDefaultsGrid .onboardField{
+  display:grid;
+  grid-template-rows:18px 42px;
+  gap:6px;
+  align-content:start;
+}
+.zmanDefaultsGrid .onboardField>span{
+  display:flex;
+  align-items:end;
+  min-height:18px;
+  line-height:1.1;
+}
+.zmanDefaultsGrid .onboardField>select{
+  height:42px;
+  min-height:42px;
+  box-sizing:border-box;
+}
+@media(max-width:1200px){
+  .zmanDefaultsGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .zmanDefaultsGrid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:520px){
+  .zmanDefaultsGrid{grid-template-columns:1fr}
+}
