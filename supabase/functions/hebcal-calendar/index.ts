@@ -25,6 +25,7 @@ type SpecialEvent = {
   requires_confirmation:boolean;
   yomtov:boolean;
   subcat:string|null;
+  is_chol_hamoed:boolean;
 };
 
 function normalizeTitle(value:string){
@@ -173,6 +174,7 @@ Deno.serve(async (req)=>{
         hebrew:item.hebrew?String(item.hebrew):null,
         yomtov:Boolean(item.yomtov),
         subcat:item.subcat?String(item.subcat):null,
+        is_chol_hamoed:/chol ha moed|ch m/.test(normalizeTitle(String(item.title||""))),
         ...classified
       }];
     });
