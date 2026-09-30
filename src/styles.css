@@ -970,3 +970,19 @@ body{color:#172b26}
   .timingEditor{grid-template-columns:1fr}
   .timingEditor .followsField{grid-column:span 1}
 }
+
+.followsGroupingNote{
+  grid-column:span 4;
+  display:grid;
+  gap:3px;
+  padding:9px 10px;
+  border:1px solid #cfe2db;
+  border-radius:8px;
+  background:#f4faf7;
+  color:#31584d;
+}
+.followsGroupingNote strong{font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.followsGroupingNote span{font-size:10px;line-height:1.35}
+@media(max-width:980px){.followsGroupingNote{grid-column:span 3}}
+@media(max-width:700px){.followsGroupingNote{grid-column:span 2}}
+@media(max-width:520px){.followsGroupingNote{grid-column:span 1}}
