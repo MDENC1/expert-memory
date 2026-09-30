@@ -986,3 +986,84 @@ body{color:#172b26}
 @media(max-width:980px){.followsGroupingNote{grid-column:span 3}}
 @media(max-width:700px){.followsGroupingNote{grid-column:span 2}}
 @media(max-width:520px){.followsGroupingNote{grid-column:span 1}}
+
+/* Precise onboarding field alignment: helper text never shifts neighboring controls */
+.onboardGrid.fourBasics{
+  align-items:start;
+}
+.onboardGrid.fourBasics .onboardField{
+  display:grid;
+  grid-template-rows:18px 42px auto;
+  gap:6px;
+  align-content:start;
+}
+.onboardGrid.fourBasics .onboardField>span{
+  display:flex;
+  align-items:end;
+  min-height:18px;
+  line-height:1.1;
+}
+.onboardGrid.fourBasics .onboardField>input,
+.onboardGrid.fourBasics .onboardField>select,
+.onboardGrid.fourBasics .endTimeSetting>select{
+  height:42px;
+  min-height:42px;
+  box-sizing:border-box;
+}
+.onboardGrid.fourBasics .endTimeSetting{
+  align-self:start;
+  gap:6px;
+}
+.onboardGrid.fourBasics .onboardField>small{
+  grid-row:3;
+  margin:0;
+}
+
+/* Keep every timing-editor label and control on the same baseline */
+.timingEditor{
+  align-items:start;
+}
+.timingEditor>label{
+  display:grid;
+  grid-template-rows:16px 38px;
+  gap:5px;
+  align-content:start;
+}
+.timingEditor>label>span{
+  display:flex;
+  align-items:end;
+  min-height:16px;
+  line-height:1.05;
+}
+.timingEditor>label>input,
+.timingEditor>label>select{
+  height:38px;
+  min-height:38px;
+  box-sizing:border-box;
+}
+
+/* Helper copy gets its own row and never changes select alignment */
+.ruleSelectOptions{
+  align-items:start;
+}
+.ruleSelectOptions>label{
+  display:grid;
+  grid-template-rows:16px 38px auto;
+  gap:5px;
+  align-content:start;
+}
+.ruleSelectOptions>label>span{
+  display:flex;
+  align-items:end;
+  min-height:16px;
+  line-height:1.05;
+}
+.ruleSelectOptions>label>select{
+  height:38px;
+  min-height:38px;
+  box-sizing:border-box;
+}
+.ruleSelectOptions>label>small{
+  grid-row:3;
+  margin:0;
+}
