@@ -214,7 +214,8 @@ function buildLiveDay(
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [currentShulId,setCurrentShulId] = useState(()=>localStorage.getItem("magnets.currentShulId") || PILOT_SHUL_ID);
+  const [currentShulId,setCurrentShulId] = useState("");
+  const [authReady,setAuthReady] = useState(false);
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>(seedDays);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [shulName,setShulName] = useState("Loading shul…");
@@ -246,11 +247,72 @@ export default function App() {
 
   useEffect(()=>{
     let cancelled=false;
+
+    async function resolveStartingShul(){
+      const {data:{session},error:sessionError}=await supabase.auth.getSession();
+      if(cancelled)return;
+
+      if(sessionError){
+        setLoadError(sessionError.message);
+        setAuthReady(true);
+        return;
+      }
+
+      if(!session){
+        const fallback=localStorage.getItem("magnets.currentShulId") || PILOT_SHUL_ID;
+        setCurrentShulId(fallback);
+        setAuthReady(true);
+        return;
+      }
+
+      const {data:memberships,error:membershipError}=await supabase
+        .from("shul_memberships")
+        .select("shul_id,created_at")
+        .eq("user_id",session.user.id)
+        .order("created_at");
+
+      if(cancelled)return;
+
+      if(membershipError){
+        setLoadError(membershipError.message);
+        setAuthReady(true);
+        return;
+      }
+
+      const ids=(memberships||[]).map(row=>row.shul_id as string);
+      if(ids.length===0){
+        localStorage.removeItem("magnets.currentShulId");
+        setCurrentShulId("");
+        setLoadError("");
+        setLoading(false);
+        setTab("onboarding");
+        setAuthReady(true);
+        return;
+      }
+
+      const saved=localStorage.getItem("magnets.currentShulId");
+      const chosen=saved && ids.includes(saved) ? saved : ids[0];
+      localStorage.setItem("magnets.currentShulId",chosen);
+      setCurrentShulId(chosen);
+      setAuthReady(true);
+    }
+
+    resolveStartingShul();
+    return()=>{cancelled=true;};
+  },[]);
+
+  useEffect(()=>{
+    if(!authReady || !currentShulId){
+      setLoading(false);
+      return;
+    }
+
+    let cancelled=false;
     async function loadLiveData(){
       setLoading(true); setLoadError("");
       const today = localIsoDate();
       const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes] = await Promise.all([
-        supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",currentShulId).single(),
+        supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",currentShulId).maybeSingle(),
         supabase.from("magnets").select("*").eq("shul_id",currentShulId).order("device_code"),
         supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
         supabase.from("schedule_entries").select("*").eq("shul_id",currentShulId).eq("active",true).order("day_of_week").order("sort_order"),
@@ -262,6 +324,13 @@ export default function App() {
       const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error;
       if(firstError){
         setLoadError(firstError.message);
+      } else if(!shulRes.data){
+        localStorage.removeItem("magnets.currentShulId");
+        setCurrentShulId("");
+        setLoadError("");
+        setLoading(false);
+        setTab("onboarding");
+        return;
       } else {
         setShulName(shulRes.data?.name || "Shul");
         setPostalCode(shulRes.data?.postal_code || "");
@@ -285,7 +354,7 @@ export default function App() {
       .subscribe();
 
     return ()=>{cancelled=true; supabase.removeChannel(channel);};
-  },[currentShulId]);
+  },[authReady,currentShulId]);
 
   return (
     <div className="appShell">
