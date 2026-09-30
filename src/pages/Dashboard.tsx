@@ -1,5 +1,6 @@
 import type { CalendarDay, Notice } from "../types";
-import type { LiveScheduleEntry } from "../App";
+import type { HebcalSpecialEvent, LiveScheduleEntry, SpecialSetupAlert } from "../App";
+import { AlertTriangle, CalendarClock } from "lucide-react";
 import MagnetPreview from "../components/MagnetPreview";
 
 const dayNames=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Shabbos"];
@@ -18,20 +19,28 @@ function ruleText(r:LiveScheduleEntry){
   return `${base}${off ? ` ${off>0?"+":""}${off} min` : ""}`;
 }
 
+function shortDate(value:string){
+  return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"})
+    .format(new Date(`${value}T12:00:00`));
+}
+
 export default function Dashboard({
-  days, previewDay, notices, remainingPushes, onGoCalendar, onAddNotice,
-  shulName,activeMagnets,healthyMagnets,scheduleEntries,loading
+  days, previewDay, notices, remainingPushes, onGoCalendar, onOpenSpecialSetup, onAddNotice,
+  shulName,activeMagnets,healthyMagnets,scheduleEntries,specialSetupAlerts,todaySpecialRequirement,loading
 }: {
   days: CalendarDay[];
   previewDay:CalendarDay;
   notices: Notice[];
   remainingPushes: number;
   onGoCalendar: () => void;
+  onOpenSpecialSetup: (date:string) => void;
   onAddNotice: () => void;
   shulName:string;
   activeMagnets:number;
   healthyMagnets:number;
   scheduleEntries:LiveScheduleEntry[];
+  specialSetupAlerts:SpecialSetupAlert[];
+  todaySpecialRequirement:HebcalSpecialEvent|undefined;
   loading:boolean;
 }) {
   const now=new Date();
@@ -47,6 +56,55 @@ export default function Dashboard({
         </div>
         <button className="primary" onClick={onAddNotice}>+ Add Notice</button>
       </div>
+
+      {(todaySpecialRequirement||specialSetupAlerts.length>0) && (
+        <div className={`panel specialSetupNotice ${todaySpecialRequirement?"urgent":""}`}>
+          <div className="specialSetupNoticeHead">
+            <div className="specialSetupNoticeIcon">
+              {todaySpecialRequirement?<AlertTriangle size={20}/>:<CalendarClock size={20}/>}
+            </div>
+            <div>
+              <span className="eyebrow">Upcoming setup</span>
+              <h2>{todaySpecialRequirement?"Today's special schedule is not set":"Special schedules need attention"}</h2>
+              <p>
+                {todaySpecialRequirement
+                  ?`${todaySpecialRequirement.title} should not use the regular weekly schedule. Set or confirm today's times.`
+                  :"Hebcal found upcoming dates that still need a shul-specific schedule."}
+              </p>
+            </div>
+          </div>
+
+          <div className="specialSetupAlertList">
+            {specialSetupAlerts.slice(0,3).map(alert=>(
+              <div className={`specialSetupAlertRow ${alert.urgent?"urgent":""}`} key={alert.groupKey}>
+                <div>
+                  <strong>{alert.label}</strong>
+                  <span>
+                    {alert.missingCount} of {alert.totalCount} special date{alert.totalCount===1?"":"s"} still need confirmation
+                    {" · "}
+                    {alert.daysUntil===0
+                      ?"needs attention today"
+                      :alert.daysUntil>0
+                        ?`next missing date in ${alert.daysUntil} day${alert.daysUntil===1?"":"s"}`
+                        :"overdue"}
+                    {" · "}{shortDate(alert.nextMissingDate)}
+                  </span>
+                </div>
+                <button className="primary" onClick={()=>onOpenSpecialSetup(alert.nextMissingDate)}>Set Times</button>
+              </div>
+            ))}
+            {todaySpecialRequirement&&!specialSetupAlerts.some(alert=>alert.nextMissingDate===todaySpecialRequirement.date)&&(
+              <div className="specialSetupAlertRow urgent">
+                <div>
+                  <strong>{todaySpecialRequirement.title}</strong>
+                  <span>Today's schedule needs to be set before the regular schedule can be used.</span>
+                </div>
+                <button className="primary" onClick={()=>onOpenSpecialSetup(todaySpecialRequirement.date)}>Set Today's Times</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="statsGrid">
         <div className="stat"><span>Active magnets</span><strong>{loading ? "—" : activeMagnets}</strong><small>{healthyMagnets} healthy</small></div>
