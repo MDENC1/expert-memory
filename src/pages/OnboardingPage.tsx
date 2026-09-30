@@ -10,16 +10,15 @@ type Props = {
 type Service = "Shacharis" | "Mincha" | "Maariv";
 type RuleMode = "fixed" | "zman" | "follows" | "none";
 type ZmanSource =
-  | "plag" | "sunset"
-  | "dawn_72" | "dawn_72fix"
+  | "dawn_72fix" | "dawn_benish"
   | "sunrise_default"
-  | "shema_gra" | "shema_benish_shabbos" | "shema_ma72fix"
-  | "midday"
-  | "mincha_gra" | "mincha_ma72fix"
-  | "ketana_gra" | "ketana_ma72fix"
-  | "plag_gra" | "plag_benish_shabbos" | "plag_ma72fix"
+  | "shema_gra" | "shema_benish" | "shema_ma72fix"
+  | "midday" | "midday_benish"
+  | "mincha_gra" | "mincha_benish" | "mincha_ma72fix"
+  | "ketana_gra" | "ketana_benish" | "ketana_ma72fix"
+  | "plag_gra" | "plag_benish" | "plag_ma72fix"
   | "sunset_default"
-  | "night_shabbos" | "night_72fix" | "night_gra180" | "night_gra225" | "night_gra240";
+  | "night_gra180" | "night_benish" | "night_72fix";
 type RoundMode = "exact" | "earlier" | "later";
 type GroupPeriod = "individual" | "week_earliest" | "month_earliest";
 
@@ -59,46 +58,47 @@ type ZmanFamilyOption = {
 const ZMAN_OPTIONS:Record<Service,ZmanFamilyOption[]>={
   Shacharis:[
     {key:"dawn",label:"Alos / Dawn",methods:[
-      {key:"dawn_72",label:"72 min as degrees (16.1°)"},
-      {key:"dawn_72fix",label:"Fixed 72 minutes"}
+      {key:"dawn_72fix",label:"72-minute dawn"},
+      {key:"dawn_benish",label:"Ben Ish"}
     ]},
     {key:"sunrise",label:"Sunrise / Netz",methods:[
-      {key:"sunrise_default",label:"MyZmanim standard"}
+      {key:"sunrise_default",label:"MyZmanim standard sunrise"}
     ]},
     {key:"shema",label:"Latest Shema",methods:[
-      {key:"shema_gra",label:"GRA / Baal HaTanya"},
-      {key:"shema_benish_shabbos",label:"Ben Ish"},
-      {key:"shema_ma72fix",label:"Magen Avraham · fixed 72 min"}
+      {key:"shema_gra",label:"GRA"},
+      {key:"shema_benish",label:"Ben Ish"},
+      {key:"shema_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
     ]},
     {key:"midday",label:"Chatzos / Midday",methods:[
-      {key:"midday",label:"MyZmanim standard"}
+      {key:"midday",label:"MyZmanim standard Chatzos"},
+      {key:"midday_benish",label:"Ben Ish"}
     ]}
   ],
   Mincha:[
     {key:"mincha_gedolah",label:"Earliest Mincha / Mincha Gedolah",methods:[
       {key:"mincha_gra",label:"GRA"},
-      {key:"mincha_ma72fix",label:"Magen Avraham · fixed 72 min"}
+      {key:"mincha_benish",label:"Ben Ish"},
+      {key:"mincha_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
     ]},
     {key:"mincha_ketana",label:"Mincha Ketana",methods:[
       {key:"ketana_gra",label:"GRA"},
-      {key:"ketana_ma72fix",label:"Magen Avraham · fixed 72 min"}
+      {key:"ketana_benish",label:"Ben Ish"},
+      {key:"ketana_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
     ]},
     {key:"plag",label:"Plag HaMincha",methods:[
-      {key:"plag_gra",label:"GRA / Baal HaTanya"},
-      {key:"plag_benish_shabbos",label:"Ben Ish"},
-      {key:"plag_ma72fix",label:"Magen Avraham · fixed 72 min"}
+      {key:"plag_gra",label:"GRA"},
+      {key:"plag_benish",label:"Ben Ish"},
+      {key:"plag_ma72fix",label:"Magen Avraham · fixed 72-minute day"}
     ]},
     {key:"sunset",label:"Sunset / Shkia",methods:[
-      {key:"sunset_default",label:"MyZmanim standard"}
+      {key:"sunset_default",label:"MyZmanim standard Shkia"}
     ]}
   ],
   Maariv:[
     {key:"nightfall",label:"Nightfall / Tzeis",methods:[
-      {key:"night_shabbos",label:"MyZmanim Shabbos nightfall"},
-      {key:"night_72fix",label:"Rabbeinu Tam · fixed 72 min"},
-      {key:"night_gra180",label:"GRA · MyZmanim NightGra180"},
-      {key:"night_gra225",label:"GRA · MyZmanim NightGra225"},
-      {key:"night_gra240",label:"GRA · MyZmanim NightGra240"}
+      {key:"night_gra180",label:"GRA"},
+      {key:"night_benish",label:"Ben Ish"},
+      {key:"night_72fix",label:"Rabbeinu Tam · fixed 72 minutes after sunset"}
     ]}
   ]
 };
@@ -151,17 +151,17 @@ function normalizeFriendlyTime(value:string){
 const initialRules:MinyanRule[]=[
   {
     id:"weekday-shacharis",service:"Shacharis",name:"Weekday Shacharis",days:[1,2,3,4,5],
-    mode:"fixed",fixedTime:"6:45 AM",source:"sunset",offset:0,direction:"before",
+    mode:"fixed",fixedTime:"6:45 AM",source:"sunset_default",offset:0,direction:"before",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"sunday-shacharis",service:"Shacharis",name:"Sunday Shacharis",days:[0],
-    mode:"fixed",fixedTime:"9:30 AM",source:"sunset",offset:0,direction:"before",
+    mode:"fixed",fixedTime:"9:30 AM",source:"sunset_default",offset:0,direction:"before",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
     id:"shabbos-shacharis",service:"Shacharis",name:"Shabbos Shacharis",days:[6],
-    mode:"fixed",fixedTime:"9:00 AM",source:"sunset",offset:0,direction:"before",
+    mode:"fixed",fixedTime:"9:00 AM",source:"sunset_default",offset:0,direction:"before",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
@@ -181,7 +181,7 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"shabbos-early-mincha",service:"Mincha",name:"Shabbos Early Mincha",days:[6],
-    mode:"fixed",fixedTime:"2:15 PM",source:"sunset",offset:0,direction:"before",
+    mode:"fixed",fixedTime:"2:15 PM",source:"sunset_default",offset:0,direction:"before",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   },
   {
@@ -191,12 +191,12 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"weekday-maariv",service:"Maariv",name:"Weekday Maariv",days:[0,1,2,3,4,5],
-    mode:"follows",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
+    mode:"follows",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   },
   {
     id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
-    mode:"zman",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
+    mode:"zman",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:""
   }
 ];
@@ -205,7 +205,7 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
   if(service==="Shacharis"){
     return {
       id:newId(),service,name:`Shacharis Minyan ${index}`,days:[],
-      mode:"fixed",fixedTime:"7:00 AM",source:"sunset",offset:0,direction:"before",
+      mode:"fixed",fixedTime:"7:00 AM",source:"sunset_default",offset:0,direction:"before",
       roundMode:"exact",groupPeriod:"individual",followsText:""
     };
   }
@@ -218,7 +218,7 @@ function defaultNewRule(service:Service,index:number):MinyanRule{
   }
   return {
     id:newId(),service,name:`Maariv Minyan ${index}`,days:[],
-    mode:"follows",fixedTime:"",source:"night_shabbos",offset:0,direction:"after",
+    mode:"follows",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
     roundMode:"exact",groupPeriod:"individual",followsText:"Follows Mincha"
   };
 }
@@ -493,7 +493,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 </select>
               </label>
               <label>
-                <span>Calculation</span>
+                <span>Calculation / opinion</span>
                 <select
                   value={rule.source}
                   onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}
