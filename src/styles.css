@@ -745,3 +745,42 @@ body{color:#172b26}
   line-height:1.35;
 }
 .yomTovScheduleMissing b{font-size:12px}
+
+/* Fast shul onboarding */
+.onboardingPage{display:grid;gap:18px}
+.onboardingTop{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:start}
+.onboardingTop>button{display:flex;align-items:center;gap:6px}
+.onboardingTop h1{margin:3px 0 4px}
+.onboardingTop p{margin:0;color:#657871}
+.onboardingProgress{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.onboardingProgress span{padding:6px 9px;border-radius:999px;background:#eef1f0;color:#71817b;font-size:11px;font-weight:800}
+.onboardingProgress span.done{background:#def2e9;color:#245d4f}
+.onboardingCard{max-width:1120px}
+.onboardForm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.onboardField{display:grid;gap:6px}
+.onboardField>span,.onboardRuleGrid>label>span{font-size:12px;font-weight:900;color:#243d36}
+.onboardField input{width:100%;border:1px solid #c5d3ce;border-radius:9px;padding:10px 11px;background:#fff;color:#172b26;font-size:14px;font-weight:700}
+.onboardField small,.onboardRuleGrid small{font-size:10px;color:#71817b;line-height:1.35}
+.onboardActions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap}
+.onboardingFinish{min-width:230px}
+.onboardError{margin-top:12px;padding:10px 12px;border:1px solid #e3b9b9;background:#fff4f4;color:#8a2c2c;border-radius:8px;font-size:12px;font-weight:800}
+.onboardSection{margin-top:20px;padding-top:18px;border-top:1px solid #e9efed}
+.onboardSection:first-of-type{margin-top:4px;padding-top:0;border-top:0}
+.onboardSection h3{margin:0 0 10px;font-size:14px}
+.onboardGrid{display:grid;gap:12px}
+.onboardGrid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.onboardGrid.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.onboardRuleGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.onboardRuleGrid>label{display:grid;gap:6px;padding:12px;border:1px solid #dce6e2;border-radius:9px;background:#fbfcfc}
+.onboardRuleGrid>label>div{display:flex;align-items:center;gap:7px}
+.onboardRuleGrid input{width:64px;border:1px solid #c5d3ce;border-radius:7px;padding:7px;text-align:center;font-weight:900}
+.onboardRuleGrid b{font-size:12px;color:#435a53}
+.sourceBadge{display:flex;align-items:center;gap:5px}
+@media(max-width:900px){
+  .onboardingTop{grid-template-columns:1fr}
+  .onboardingProgress{justify-content:flex-start}
+  .onboardGrid.four,.onboardRuleGrid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:650px){
+  .onboardForm,.onboardGrid.two,.onboardGrid.four,.onboardRuleGrid{grid-template-columns:1fr}
+}
