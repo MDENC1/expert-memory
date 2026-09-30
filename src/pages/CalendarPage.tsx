@@ -402,7 +402,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         setZmanimError("");
       }
       if((hebcalRes as any).__error){
-        setHebcalEvents([]);
+        // Keep any already-loaded calendar metadata rather than silently
+        // replacing it with an empty set and allowing regular schedules through.
         setHebcalError((hebcalRes as any).__error);
       }else{
         setHebcalEvents(((hebcalRes as any).events||[]) as HebcalSpecialEvent[]);
@@ -1186,6 +1187,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       </div>
 
       {error && <div className="panel" style={{marginBottom:14,borderColor:"#c44"}}><strong>Calendar error:</strong> {error}</div>}
+      {hebcalError&&(
+        <div className="panel" style={{marginBottom:14,borderColor:"#c98a70",background:"#fff8f4"}}>
+          <strong>Jewish calendar safety check unavailable:</strong> {hebcalError}
+          <div style={{fontSize:11,marginTop:4}}>Previously loaded Hebcal dates are being kept. Verify special dates before relying on the regular schedule.</div>
+        </div>
+      )}
       <div className="calendarToolbar">
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
           {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
