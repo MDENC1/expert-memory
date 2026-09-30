@@ -199,6 +199,7 @@ function buildLiveDay(
   const ruleBased=(service:string)=>todayRules
     .filter(r=>(r.service_type||"").toLowerCase()===service && !r.service_time)
     .map(r=>{
+      if(r.timing_source==="follows") return r.follows_text || "Follows Mincha";
       const source=(r.timing_source||"rule").replaceAll("_"," ");
       const off=r.timing_offset_minutes||0;
       return `${source}${off ? ` ${off>0?"+":""}${off}m` : ""}`;
