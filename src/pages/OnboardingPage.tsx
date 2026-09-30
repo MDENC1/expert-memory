@@ -272,7 +272,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
             round_direction:rule.mode==="zman"&&rule.roundToFive?"down":null,
             use_weekly_earliest:rule.mode==="zman"?rule.sameTimeAcrossDays:false,
             weekly_group:rule.mode==="zman"&&rule.sameTimeAcrossDays?`${service.toLowerCase()}-${rule.id}`:"",
-            follows_text:rule.mode==="follows"?(rule.followsText||"Dollows Mincha"):""
+            follows_text:rule.mode==="follows"?(rule.followsText||"Follows Mincha"):""
           });
         });
       });
