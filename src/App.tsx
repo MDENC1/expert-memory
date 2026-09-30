@@ -81,6 +81,7 @@ export type HebcalSpecialEvent = {
   requires_confirmation:boolean;
   yomtov:boolean;
   subcat:string|null;
+  is_chol_hamoed:boolean;
 };
 
 export type SpecialSetupAlert = {
