@@ -403,6 +403,48 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     return minutesToDisplay(roundMinutes(Math.min(...targets),roundTo,roundDirection));
   };
 
+  const resolveScheduleRuleTime=(date:string,r:LiveScheduleEntry)=>{
+    if(r.timing_source!=="plag"&&r.timing_source!=="sunset")return "";
+    const map=r.timing_source==="plag" ? zmanim.plagHaMincha : zmanim.sunset;
+    if(!map)return "";
+
+    const period=r.group_period || (r.use_weekly_earliest ? "week_earliest" : "individual");
+    let candidateDates:string[]=[date];
+
+    if(period!=="individual"){
+      const matchingGroup=r.weekly_group
+        ? scheduleEntries.filter(row=>row.weekly_group===r.weekly_group)
+        : [r];
+      const dows=new Set(matchingGroup.map(row=>row.day_of_week));
+
+      if(period==="week_earliest"){
+        const start=weekStart(date);
+        const sunday=new Date(`${start}T12:00:00`);
+        candidateDates=Array.from({length:7},(_,i)=>{
+          const d=new Date(sunday);
+          d.setDate(sunday.getDate()+i);
+          return isoDate(d);
+        }).filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+      }else if(period==="month_earliest"){
+        const baseDate=new Date(`${date}T12:00:00`);
+        const y=baseDate.getFullYear();
+        const m=baseDate.getMonth();
+        const count=new Date(y,m+1,0).getDate();
+        candidateDates=Array.from({length:count},(_,i)=>isoDate(new Date(y,m,i+1,12)))
+          .filter(key=>dows.has(new Date(`${key}T12:00:00`).getDay()));
+      }
+    }
+
+    const targets=candidateDates
+      .map(key=>timeMinutesFromIso(map[key]))
+      .filter((value):value is number=>value!==null)
+      .map(value=>value+(r.timing_offset_minutes||0));
+
+    if(!targets.length)return "";
+    const raw=period==="individual" ? targets[0] : Math.min(...targets);
+    return minutesToDisplay(roundMinutes(raw,r.round_to_minutes,r.round_direction));
+  };
+
   const keyTimesForDate=(date:string)=>{
     const d=new Date(`${date}T12:00:00`);
     const dow=d.getDay();
@@ -520,15 +562,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const weeklyRowText=(date:string,r:LiveScheduleEntry)=>{
     if(r.service_time)return prettyTime(r.service_time);
+    if(r.timing_source==="none")return "NO MINYAN";
     if(r.timing_source==="follows")return r.follows_text||"Follows Mincha";
-    const resolved=resolveRuleTime(
-      date,
-      r.timing_source,
-      r.timing_offset_minutes,
-      r.use_weekly_earliest!==false,
-      r.round_to_minutes,
-      r.round_direction
-    );
+    const resolved=resolveScheduleRuleTime(date,r);
     return resolved || "Timing unavailable";
   };
 
