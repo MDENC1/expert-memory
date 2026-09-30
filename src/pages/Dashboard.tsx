@@ -11,6 +11,7 @@ function prettyTime(t:string|null){
 }
 function ruleText(r:LiveScheduleEntry){
   if(r.service_time) return prettyTime(r.service_time);
+  if(r.timing_source==="none") return "NO MINYAN";
   if(r.timing_source==="follows") return r.follows_text || "Follows Mincha";
   const base=(r.timing_source||"rule").replaceAll("_"," ");
   const off=r.timing_offset_minutes||0;
