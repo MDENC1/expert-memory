@@ -162,6 +162,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [error,setError] = useState("");
   const [zmanim,setZmanim] = useState<ZmanimBatch>({});
   const [zmanimError,setZmanimError] = useState("");
+  const [zmanimSource,setZmanimSource] = useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
   const [overrides,setOverrides] = useState<ScheduleOverride[]>([]);
   const [editRows,setEditRows] = useState<EditRow[]>([]);
@@ -178,6 +179,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setZmanim({});
     setError("");
     setZmanimError("");
+    setZmanimSource("");
   },[shulId]);
 
   const year=viewDate.getFullYear();
@@ -224,12 +226,27 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .maybeSingle()
       ]);
 
+      const hebcalFallback=()=>fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
+        .then(r=>{if(!r.ok)throw new Error(`Hebcal fallback failed (${r.status})`);return r.json();})
+        .then(data=>({times:data?.times||{},source:"Hebcal fallback"}));
+
       const zmanimPromise=postalCode
-        ? fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
-            .then(r=>{if(!r.ok)throw new Error(`Zmanim request failed (${r.status})`);return r.json();})
-            .then(data=>data?.times||{})
-            .catch(err=>({__error:String(err?.message||err)}))
-        : Promise.resolve({__error:"No ZIP code configured"});
+        ? supabase.functions.invoke("myzmanim",{
+            body:{postal_code:postalCode,start_date:startDate,end_date:endDate}
+          })
+            .then(({data,error})=>{
+              if(error)throw error;
+              if(!data?.success)throw new Error(data?.error||"MyZmanim request failed");
+              return {times:data.times||{},source:"MyZmanim"};
+            })
+            .catch(async myzmanimErr=>{
+              try{
+                return await hebcalFallback();
+              }catch(fallbackErr:any){
+                return {__error:`MyZmanim: ${String(myzmanimErr?.message||myzmanimErr)}; Hebcal: ${String(fallbackErr?.message||fallbackErr)}`};
+              }
+            })
+        : Promise.resolve({__error:"No postal code configured"});
 
       const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
       if(cancelled)return;
@@ -260,13 +277,17 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
       if((zmanimRes as any).__error){
         setZmanim({});
+        setZmanimSource("");
         setZmanimError((zmanimRes as any).__error);
       }else{
-        const next=zmanimRes as ZmanimBatch;
+        const wrapped=zmanimRes as any;
+        const next=(wrapped.times||{}) as ZmanimBatch;
         setZmanim(prev=>({
           plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
           sunset:{...(prev.sunset||{}),...(next.sunset||{})}
         }));
+        setZmanimSource(wrapped.source||"");
+        setZmanimError("");
       }
       setLoading(false);
     }
@@ -875,7 +896,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
         </button>
         <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected across any month` : "Click a day to see its real schedule and preview.")}</span>
-        {!loading && <small>{zmanimError ? "Zmanim fallback unavailable" : "Timing fallback: Hebcal"}</small>}
+        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Timing: ${zmanimSource}` : "Timing source pending")}</small>}
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
