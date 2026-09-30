@@ -802,6 +802,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       setDaySaveMessage("");
       return;
     }
+
+    // While the admin is drafting a missing special schedule, background
+    // MyZmanim/Hebcal/Supabase refreshes must not wipe the draft fields.
+    if(draftingSpecialDate===selectedDay)return;
+
     setDraftingSpecialDate("");
     setEditRows(selectedRows.map(r=>({
       label:r.label,
@@ -809,7 +814,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       note:r.note||""
     })));
     setDaySaveMessage("");
-  },[selectedDay,overrides,specialEntries,specialDays,zmanim,scheduleEntries,hebcalEvents]);
+  },[selectedDay,overrides,specialEntries,specialDays,zmanim,scheduleEntries,hebcalEvents,draftingSpecialDate]);
 
   useEffect(()=>{
     if(selected.length<=1){
