@@ -520,6 +520,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const weeklyRowText=(date:string,r:LiveScheduleEntry)=>{
     if(r.service_time)return prettyTime(r.service_time);
+    if(r.timing_source==="follows")return r.follows_text||"Follows Mincha";
     const resolved=resolveRuleTime(
       date,
       r.timing_source,
