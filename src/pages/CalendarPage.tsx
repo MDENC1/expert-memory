@@ -281,7 +281,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .order("event_date")
           .order("sort_order"),
         supabase.from("zmanim_settings")
-          .select("fast_end_minutes,zman_defaults")
+          .select("shabbos_yom_tov_end_minutes,zman_defaults")
           .eq("shul_id",shulId)
           .maybeSingle()
       ]);
@@ -330,8 +330,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           const outside=prev.filter(row=>row.event_date<startDate||row.event_date>endDate);
           return [...outside,...nextOverrides];
         });
-        if(zmanimSettingsRes.data?.fast_end_minutes){
-          setShabbosEndMinutes(Number(zmanimSettingsRes.data.fast_end_minutes));
+        if(zmanimSettingsRes.data?.shabbos_yom_tov_end_minutes){
+          setShabbosEndMinutes(Number(zmanimSettingsRes.data.shabbos_yom_tov_end_minutes));
         }
         if(zmanimSettingsRes.data?.zman_defaults){
           setZmanDefaults({
