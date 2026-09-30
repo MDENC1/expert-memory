@@ -648,7 +648,15 @@ export default function App() {
 
       const alerts:SpecialSetupAlert[]=[];
       for(const [groupKey,groupEvents] of groups){
-        const sorted=groupEvents.slice().sort((a,b)=>a.date.localeCompare(b.date));
+        const uniqueByDate=new Map<string,HebcalSpecialEvent>();
+        for(const event of groupEvents.slice().sort((a,b)=>a.date.localeCompare(b.date))){
+          const existing=uniqueByDate.get(event.date);
+          if(!existing||(!existing.blocks_regular_schedule&&event.blocks_regular_schedule)){
+            uniqueByDate.set(event.date,event);
+          }
+        }
+
+        const sorted=[...uniqueByDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
         const missing=sorted.filter(event=>!configured(event.date));
         if(!missing.length)continue;
 
