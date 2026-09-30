@@ -1,3 +1,5 @@
+import tzLookup from "npm:tz-lookup@6.1.25";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -23,6 +25,93 @@ function dateRange(start: string, end: string) {
   return out;
 }
 
+const countryNames: Record<string,string[]> = {
+  US: ["United States","United States of America","USA"],
+  GB: ["United Kingdom","Great Britain","UK"],
+  IL: ["Israel"],
+};
+
+function countryMatches(code:string, returned:string|null|undefined) {
+  if (!code || !returned) return true;
+  const allowed=countryNames[code];
+  return !allowed || allowed.some(name=>name.toLowerCase()===returned.toLowerCase());
+}
+
+async function findLocationId(user:string,key:string,postalCode:string) {
+  const searchParams = new URLSearchParams({
+    User: user,
+    Key: key,
+    Coding: "JS",
+    Query: postalCode,
+    TimeZone: "",
+  });
+
+  const searchResponse = await fetch(
+    "https://api.myzmanim.com/engine1.json.aspx/searchPostal",
+    { method: "POST", headers, body: searchParams }
+  );
+  const searchData = await searchResponse.json();
+  if (searchData.ErrMsg) throw new Error(searchData.ErrMsg);
+  if (!searchData.LocationID) throw new Error("MyZmanim could not find that postal code.");
+  return String(searchData.LocationID);
+}
+
+async function getDay(user:string,key:string,locationId:string,date:string) {
+  const dayParams = new URLSearchParams({
+    User: user,
+    Key: key,
+    Coding: "JS",
+    Language: "en",
+    LocationID: locationId,
+    InputDate: date,
+  });
+
+  const response = await fetch(
+    "https://api.myzmanim.com/engine1.json.aspx/getDay",
+    { method: "POST", headers, body: dayParams }
+  );
+  const data = await response.json();
+  if (data.ErrMsg) throw new Error(data.ErrMsg);
+  return data;
+}
+
+async function resolveTimezone(countryCode:string,postalCode:string,place:any) {
+  if (countryCode==="GB") return "Europe/London";
+  if (countryCode==="IL") return "Asia/Jerusalem";
+
+  const params=new URLSearchParams({
+    format:"jsonv2",
+    postalcode:postalCode,
+    countrycodes:countryCode.toLowerCase(),
+    limit:"1",
+    addressdetails:"1"
+  });
+  const response=await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`,{
+    headers:{
+      "User-Agent":"MagnetsPrototype/0.1 location-verification",
+      "Accept":"application/json"
+    }
+  });
+  if(!response.ok) throw new Error("Could not resolve the location time zone.");
+  const matches=await response.json();
+  const first=Array.isArray(matches)?matches[0]:null;
+  if(!first?.lat||!first?.lon){
+    throw new Error(`Could not determine the time zone for ${place?.NameShort||postalCode}.`);
+  }
+  return tzLookup(Number(first.lat),Number(first.lon));
+}
+
+function cleanPlace(data:any) {
+  return {
+    name: data?.Place?.NameShort ?? null,
+    city: data?.Place?.City ?? null,
+    state: data?.Place?.State ?? null,
+    country: data?.Place?.Country ?? null,
+    postal_code: data?.Place?.PostalCode ?? null,
+    location_id: data?.Place?.LocationID ?? null,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -32,9 +121,34 @@ Deno.serve(async (req) => {
     if (!user || !key) throw new Error("MyZmanim credentials are missing.");
 
     const body = await req.json();
+    const action = String(body.action || "times");
     const postalCode = String(body.postal_code || "").trim();
     const countryCode = String(body.country_code || "").toUpperCase();
     let locationId = body.location_id ? String(body.location_id) : "";
+
+    if(action==="resolve_location"){
+      if(!postalCode) throw new Error("Postal code is required.");
+      locationId=await findLocationId(user,key,postalCode);
+      const today=isoDate(new Date());
+      const day=await getDay(user,key,locationId,today);
+      const returnedCountry=day?.Place?.Country ?? null;
+      if(!countryMatches(countryCode,returnedCountry)){
+        throw new Error(`Postal code matched ${returnedCountry}, not the selected country.`);
+      }
+      const place=cleanPlace(day);
+      const timezone=await resolveTimezone(countryCode,postalCode,day?.Place);
+      return new Response(JSON.stringify({
+        success:true,
+        source:"MyZmanim",
+        verified:true,
+        location_id:locationId,
+        place,
+        timezone,
+      }),{
+        status:200,
+        headers:{...corsHeaders,"Content-Type":"application/json"},
+      });
+    }
 
     const singleDate = body.date ? String(body.date) : "";
     const startDate = body.start_date ? String(body.start_date) : singleDate;
@@ -44,22 +158,7 @@ Deno.serve(async (req) => {
 
     if (!locationId) {
       if (!postalCode) throw new Error("postal_code or location_id is required.");
-
-      const searchParams = new URLSearchParams({
-        User: user,
-        Key: key,
-        Coding: "JS",
-        Query: postalCode,
-        TimeZone: "",
-      });
-
-      const searchResponse = await fetch(
-        "https://api.myzmanim.com/engine1.json.aspx/searchPostal",
-        { method: "POST", headers, body: searchParams }
-      );
-      const searchData = await searchResponse.json();
-      if (searchData.ErrMsg) throw new Error(searchData.ErrMsg);
-      locationId = searchData.LocationID;
+      locationId = await findLocationId(user,key,postalCode);
     }
 
     const dates = dateRange(startDate, endDate);
@@ -99,44 +198,21 @@ Deno.serve(async (req) => {
     let place: Record<string, unknown> | null = null;
 
     const results = await Promise.all(dates.map(async (date) => {
-      const dayParams = new URLSearchParams({
-        User: user,
-        Key: key,
-        Coding: "JS",
-        Language: "en",
-        LocationID: locationId,
-        InputDate: date,
-      });
-
-      const response = await fetch(
-        "https://api.myzmanim.com/engine1.json.aspx/getDay",
-        { method: "POST", headers, body: dayParams }
-      );
-      const data = await response.json();
-      if (data.ErrMsg) throw new Error(`${date}: ${data.ErrMsg}`);
-      return { date, data };
+      try{
+        const data=await getDay(user,key,locationId,date);
+        return {date,data};
+      }catch(error){
+        throw new Error(`${date}: ${error instanceof Error?error.message:"MyZmanim error"}`);
+      }
     }));
-
-    const countryNames: Record<string,string> = {
-      US: "United States",
-      GB: "United Kingdom",
-      IL: "Israel",
-    };
 
     for (const { date, data } of results) {
       if (!place) {
         const returnedCountry = data?.Place?.Country ?? null;
-        if (countryCode && countryNames[countryCode] && returnedCountry && returnedCountry !== countryNames[countryCode]) {
-          throw new Error(`Postal code matched ${returnedCountry}, not ${countryNames[countryCode]}`);
+        if (!countryMatches(countryCode,returnedCountry)) {
+          throw new Error(`Postal code matched ${returnedCountry}, not the selected country.`);
         }
-
-        place = {
-          name: data?.Place?.NameShort ?? null,
-          city: data?.Place?.City ?? null,
-          state: data?.Place?.State ?? null,
-          country: data?.Place?.Country ?? null,
-          postal_code: data?.Place?.PostalCode ?? null,
-        };
+        place = cleanPlace(data);
       }
 
       if (data?.Zman?.PlagGra) plagHaMincha[date] = data.Zman.PlagGra;
