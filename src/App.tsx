@@ -76,6 +76,13 @@ function prettyTime(t:string|null){
   return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"}).format(d);
 }
 
+function prettyIsoClock(value:string|undefined){
+  if(!value)return "";
+  const match=value.match(/T(\d{2}):(\d{2})/);
+  if(!match)return "";
+  return prettyTime(`${match[1]}:${match[2]}`);
+}
+
 function hebrewParts(date:Date){
   const parts=new Intl.DateTimeFormat("en-u-ca-hebrew",{day:"numeric",month:"long",year:"numeric"}).formatToParts(date);
   return {
@@ -193,25 +200,33 @@ function buildLiveDay(
   }
 
   const todayRules=schedule.filter(r=>r.day_of_week===dow);
-  const fixed=(service:string)=>todayRules
-    .filter(r=>(r.service_type||"").toLowerCase()===service && r.service_time)
-    .map(r=>prettyTime(r.service_time))
-    .filter(Boolean);
-  const ruleBased=(service:string)=>todayRules
-    .filter(r=>(r.service_type||"").toLowerCase()===service && !r.service_time)
+  const maarivFollowsMincha=todayRules.some(r=>
+    (r.service_type||"").toLowerCase()==="maariv" && r.timing_source==="follows"
+  );
+
+  const displayRule=(r:LiveScheduleEntry)=>{
+    if(r.service_time)return prettyTime(r.service_time);
+    if(r.timing_source==="none")return "NO MINYAN";
+    if(r.timing_source==="follows")return r.follows_text || "Follows Mincha";
+    const source=(r.timing_source||"rule").replaceAll("_"," ");
+    const off=r.timing_offset_minutes||0;
+    return `${source}${off ? ` ${off>0?"+":""}${off}m` : ""}`;
+  };
+
+  const rows=todayRules
+    .filter(r=>!((r.service_type||"").toLowerCase()==="maariv" && r.timing_source==="follows"))
     .map(r=>{
-      if(r.timing_source==="none") return "NO MINYAN";
-      if(r.timing_source==="follows") return r.follows_text || "Follows Mincha";
-      const source=(r.timing_source||"rule").replaceAll("_"," ");
-      const off=r.timing_offset_minutes||0;
-      return `${source}${off ? ` ${off>0?"+":""}${off}m` : ""}`;
+      const service=(r.service_type||"").toLowerCase();
+      let label=r.display_name||r.service_type.replaceAll("_"," ");
+      if(maarivFollowsMincha && service==="mincha" && r.timing_source!=="none"){
+        label=label.replace(/\s*\/\s*Maariv$/i,"")+" / Maariv";
+      }
+      return {label,time:displayRule(r)};
     });
 
   return {
     ...base,
-    shacharis:[...fixed("shacharis"),...ruleBased("shacharis")].join(" · ") || undefined,
-    mincha:[...fixed("mincha"),...ruleBased("mincha")].join(" · ") || undefined,
-    maariv:[...fixed("maariv"),...ruleBased("maariv")].join(" · ") || undefined
+    shulScheduleRows:rows
   };
 }
 
@@ -231,14 +246,45 @@ export default function App() {
   const [pushesUsed,setPushesUsed] = useState(0);
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
+  const [liveZmanimRows,setLiveZmanimRows] = useState<Array<{label:string;time:string}>>([]);
 
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
   const healthyDevices = activeDevices.filter(d=>String(d.status).toLowerCase()==="healthy");
   const livePreviewDay=useMemo(
-    ()=>buildLiveDay(scheduleEntries,specialDay,specialEntries),
-    [scheduleEntries,specialDay,specialEntries]
+    ()=>({...buildLiveDay(scheduleEntries,specialDay,specialEntries),zmanimRows:liveZmanimRows}),
+    [scheduleEntries,specialDay,specialEntries,liveZmanimRows]
   );
+
+  useEffect(()=>{
+    let cancelled=false;
+    if(!postalCode){
+      setLiveZmanimRows([]);
+      return;
+    }
+
+    const today=localIsoDate();
+    supabase.functions.invoke("myzmanim",{
+      body:{postal_code:postalCode,country_code:countryCode,date:today}
+    }).then(({data,error})=>{
+      if(cancelled)return;
+      if(error||!data?.success){
+        setLiveZmanimRows([]);
+        return;
+      }
+      const times=data.times||{};
+      const rows=[
+        {label:"Netz",time:prettyIsoClock(times.sunrise?.[today])},
+        {label:"Latest Shema",time:prettyIsoClock(times.latestShema?.[today])},
+        {label:"Chatzos",time:prettyIsoClock(times.midday?.[today])},
+        {label:"Plag",time:prettyIsoClock(times.plagHaMincha?.[today])},
+        {label:"Shkia",time:prettyIsoClock(times.sunset?.[today])}
+      ].filter(row=>row.time);
+      setLiveZmanimRows(rows);
+    });
+
+    return()=>{cancelled=true;};
+  },[postalCode,countryCode,currentShulId]);
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
@@ -441,7 +487,7 @@ export default function App() {
             <div className="settingsGrid">
               <div className="panel"><h2>Shul Profile</h2><p>{shulName}</p><p className="helperText">ZIP {postalCode || "—"} · Connected to Supabase.</p></div>
               <div className="panel"><h2>Administrators</h2><p>Pilot access</p><p className="helperText">Proper user accounts are on the pre-launch list.</p></div>
-              <div className="panel"><h2>Integrations</h2><p>MyZmanim fallback mode</p><p className="helperText">Live MyZmanim is not connected yet.</p></div>
+              <div className="panel"><h2>Integrations</h2><p>MyZmanim connected</p><p className="helperText">MyZmanim supplies zmanim/times. Calendar/date metadata is kept separate.</p></div>
             </div>
           </>
         )}
