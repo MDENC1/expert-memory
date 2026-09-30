@@ -409,18 +409,40 @@ export default function App() {
 
   useEffect(()=>{
     let cancelled=false;
-    if(!postalCode){
-      setLiveZmanim({});
-      setLiveZmanimRows([]);
+
+    // The live preview only needs MyZmanim while the Dashboard is visible.
+    // Calendar loads its own month range, so don't duplicate that traffic.
+    if(tab!=="dashboard"||!postalCode){
+      if(!postalCode){
+        setLiveZmanim({});
+        setLiveZmanimRows([]);
+      }
       return;
     }
 
     const now=new Date();
     const today=localIsoDate(now);
-    const start=new Date(now.getFullYear(),now.getMonth(),1,12);
-    start.setDate(start.getDate()-6);
-    const end=new Date(now.getFullYear(),now.getMonth()+1,0,12);
-    end.setDate(end.getDate()+6);
+    const dow=now.getDay();
+    const todayRules=scheduleEntries.filter(rule=>rule.day_of_week===dow);
+
+    const needsMonth=todayRules.some(rule=>rule.group_period==="month_earliest");
+    const needsWeek=todayRules.some(rule=>
+      rule.group_period==="week_earliest"||Boolean(rule.use_weekly_earliest)
+    );
+
+    let start=new Date(now.getFullYear(),now.getMonth(),now.getDate(),12);
+    let end=new Date(start);
+
+    if(needsMonth){
+      start=new Date(now.getFullYear(),now.getMonth(),1,12);
+      end=new Date(now.getFullYear(),now.getMonth()+1,0,12);
+    }else if(needsWeek){
+      start=new Date(now);
+      start.setHours(12,0,0,0);
+      start.setDate(start.getDate()-start.getDay());
+      end=new Date(start);
+      end.setDate(end.getDate()+6);
+    }
 
     supabase.functions.invoke("myzmanim",{
       body:{
@@ -456,7 +478,7 @@ export default function App() {
     });
 
     return()=>{cancelled=true;};
-  },[postalCode,countryCode,myzmanimLocationId,currentShulId,zmanDefaults]);
+  },[tab,postalCode,countryCode,myzmanimLocationId,currentShulId,zmanDefaults,scheduleEntries]);
 
   const nav = useMemo(() => [
     ["dashboard", "Dashboard", LayoutDashboard],
