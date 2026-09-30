@@ -10,6 +10,7 @@ type Props = {
   scheduleEntries: LiveScheduleEntry[];
   shulName: string;
   postalCode: string;
+  countryCode: string;
   shulId: string;
 };
 
@@ -147,7 +148,7 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,shulId}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,shulId}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
@@ -226,13 +227,16 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .maybeSingle()
       ]);
 
-      const hebcalFallback=()=>fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
+      const hebcalFallback=()=>{
+        if(countryCode!=="US")throw new Error("Hebcal ZIP fallback is only configured for US locations");
+        return fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
         .then(r=>{if(!r.ok)throw new Error(`Hebcal fallback failed (${r.status})`);return r.json();})
         .then(data=>({times:data?.times||{},source:"Hebcal fallback"}));
+      };
 
       const zmanimPromise=postalCode
         ? supabase.functions.invoke("myzmanim",{
-            body:{postal_code:postalCode,start_date:startDate,end_date:endDate}
+            body:{postal_code:postalCode,country_code:countryCode,start_date:startDate,end_date:endDate}
           })
             .then(({data,error})=>{
               if(error)throw error;
@@ -293,7 +297,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     loadMonth();
     return()=>{cancelled=true};
-  },[startDate,endDate,postalCode,shulId]);
+  },[startDate,endDate,postalCode,countryCode,shulId]);
 
   const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
   const entriesMap=useMemo(()=>{
