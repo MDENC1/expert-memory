@@ -11,6 +11,7 @@ type Props = {
   shulName: string;
   postalCode: string;
   countryCode: string;
+  locationId: string;
   shulId: string;
 };
 
@@ -202,7 +203,7 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,shulId}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
@@ -289,7 +290,13 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       // and must never silently substitute different zmanim calculations.
       const zmanimPromise=postalCode
         ? supabase.functions.invoke("myzmanim",{
-            body:{postal_code:postalCode,country_code:countryCode,start_date:zmanimStartDate,end_date:zmanimEndDate}
+            body:{
+              postal_code:postalCode,
+              country_code:countryCode,
+              location_id:locationId||undefined,
+              start_date:zmanimStartDate,
+              end_date:zmanimEndDate
+            }
           })
             .then(({data,error})=>{
               if(error)throw error;
@@ -366,7 +373,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     loadMonth();
     return()=>{cancelled=true};
-  },[startDate,endDate,postalCode,countryCode,shulId]);
+  },[startDate,endDate,postalCode,countryCode,locationId,shulId]);
 
   const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
   const entriesMap=useMemo(()=>{
