@@ -69,6 +69,32 @@ Deno.serve(async (req) => {
     const sunset: Record<string, string> = {};
     const candleLighting: Record<string, string> = {};
     const sunrise: Record<string, string> = {};
+    const latestShema: Record<string, string> = {};
+    const midday: Record<string, string> = {};
+    const sources: Record<string, Record<string,string>> = {};
+    const sourceFields: Record<string,string> = {
+      dawn_72: "Dawn72",
+      dawn_72fix: "Dawn72fix",
+      sunrise_default: "SunriseDefault",
+      shema_gra: "ShemaGra",
+      shema_benish_shabbos: "ShemaBenIsh72ToShabbos",
+      shema_ma72fix: "ShemaMA72fix",
+      midday: "Midday",
+      mincha_gra: "MinchaGra",
+      mincha_ma72fix: "MinchaMA72fix",
+      ketana_gra: "KetanaGra",
+      ketana_ma72fix: "KetanaMA72fix",
+      plag_gra: "PlagGra",
+      plag_benish_shabbos: "PlagBenIsh72ToShabbos",
+      plag_ma72fix: "PlagMA72fix",
+      sunset_default: "SunsetDefault",
+      night_shabbos: "NightShabbos",
+      night_72fix: "Night72fix",
+      night_gra180: "NightGra180",
+      night_gra225: "NightGra225",
+      night_gra240: "NightGra240"
+    };
+    for (const key of Object.keys(sourceFields)) sources[key] = {};
     let place: Record<string, unknown> | null = null;
 
     const results = await Promise.all(dates.map(async (date) => {
@@ -115,6 +141,13 @@ Deno.serve(async (req) => {
       if (data?.Zman?.PlagGra) plagHaMincha[date] = data.Zman.PlagGra;
       if (data?.Zman?.SunsetDefault) sunset[date] = data.Zman.SunsetDefault;
       if (data?.Zman?.SunriseDefault) sunrise[date] = data.Zman.SunriseDefault;
+      if (data?.Zman?.ShemaGra) latestShema[date] = data.Zman.ShemaGra;
+      if (data?.Zman?.Midday) midday[date] = data.Zman.Midday;
+
+      for (const [key,field] of Object.entries(sourceFields)) {
+        const value = data?.Zman?.[field];
+        if (value && value !== "0001-01-01T00:00:00Z") sources[key][date] = value;
+      }
 
       const candleMinutes = data?.Place?.CandlelightingMinutes;
       const candleField = candleMinutes ? `Candles${candleMinutes}` : null;
@@ -126,7 +159,7 @@ Deno.serve(async (req) => {
       source: "MyZmanim",
       location_id: locationId,
       place,
-      times: { plagHaMincha, sunset, sunrise, candleLighting },
+      times: { plagHaMincha, sunset, sunrise, latestShema, midday, candleLighting, sources },
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
