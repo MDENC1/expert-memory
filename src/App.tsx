@@ -40,6 +40,7 @@ export type LiveScheduleEntry = {
   round_direction: "down" | "up" | "nearest" | null;
   use_weekly_earliest: boolean | null;
   weekly_group: string | null;
+  group_period: "individual" | "week_earliest" | "month_earliest" | null;
 };
 
 type SpecialScheduleDay = {
@@ -199,6 +200,7 @@ function buildLiveDay(
   const ruleBased=(service:string)=>todayRules
     .filter(r=>(r.service_type||"").toLowerCase()===service && !r.service_time)
     .map(r=>{
+      if(r.timing_source==="none") return "NO MINYAN";
       if(r.timing_source==="follows") return r.follows_text || "Follows Mincha";
       const source=(r.timing_source||"rule").replaceAll("_"," ");
       const off=r.timing_offset_minutes||0;
