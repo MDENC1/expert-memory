@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CalendarDay, Notice, NoticeType } from "../types";
 import type { LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
-import { PILOT_SHUL_ID, supabase } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
 
 type Props = {
   notices: Notice[];
@@ -10,6 +10,7 @@ type Props = {
   scheduleEntries: LiveScheduleEntry[];
   shulName: string;
   postalCode: string;
+  shulId: string;
 };
 
 type MonthCell = {
@@ -146,7 +147,7 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,shulId}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
@@ -187,13 +188,13 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       const supabasePromise=Promise.all([
         supabase.from("special_schedule_days")
           .select("event_date,title,replace_normal_schedule")
-          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("shul_id",shulId)
           .gte("event_date",startDate)
           .lte("event_date",endDate)
           .order("event_date"),
         supabase.from("special_schedule_entries")
           .select("event_date,title,event_time,approximate,note,sort_order")
-          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("shul_id",shulId)
           .eq("active",true)
           .gte("event_date",startDate)
           .lte("event_date",endDate)
@@ -201,7 +202,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .order("sort_order"),
         supabase.from("schedule_overrides")
           .select("id,event_date,service_type,service_time,timing_source,sort_order,active,priority_level")
-          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("shul_id",shulId)
           .eq("active",true)
           .gte("event_date",startDate)
           .lte("event_date",endDate)
@@ -209,7 +210,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .order("sort_order"),
         supabase.from("zmanim_settings")
           .select("fast_end_minutes")
-          .eq("shul_id",PILOT_SHUL_ID)
+          .eq("shul_id",shulId)
           .maybeSingle()
       ]);
 
@@ -642,7 +643,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           ? normalizeDisplayTime(bulkRow.timeText)
           : row.time;
         allPayload.push({
-          shul_id:PILOT_SHUL_ID,
+          shul_id:shulId,
           event_date:date,
           service_type:row.label,
           service_time:displayTimeTo24(replacement)||null,
@@ -656,7 +657,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     const deleteRes=await supabase.from("schedule_overrides")
       .delete()
-      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("shul_id",shulId)
       .in("event_date",selected);
 
     if(deleteRes.error){
@@ -697,7 +698,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const selectedSet=new Set(selected);
     const res=await supabase.from("schedule_overrides")
       .delete()
-      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("shul_id",shulId)
       .in("event_date",selected);
 
     if(res.error){
@@ -719,7 +720,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     const deleteRes=await supabase.from("schedule_overrides")
       .delete()
-      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("shul_id",shulId)
       .eq("event_date",selectedDay);
 
     if(deleteRes.error){
@@ -729,7 +730,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
 
     const payload=rowsToSave.map((row,index)=>({
-      shul_id:PILOT_SHUL_ID,
+      shul_id:shulId,
       event_date:selectedDay,
       service_type:row.label,
       service_time:displayTimeTo24(row.timeText)||null,
@@ -761,7 +762,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setError("");
     const res=await supabase.from("schedule_overrides")
       .delete()
-      .eq("shul_id",PILOT_SHUL_ID)
+      .eq("shul_id",shulId)
       .eq("event_date",selectedDay);
     if(res.error){
       setError(res.error.message);
@@ -776,7 +777,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const addToSelectedDates=async()=>{
     if (!selected.length || !newHeadline.trim()) return;
     const payload=selected.map(date=>({
-      shul_id:PILOT_SHUL_ID,
+      shul_id:shulId,
       content_type:newType,
       title:newHeadline.trim(),
       details:newDetails.trim()||null,
