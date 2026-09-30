@@ -31,6 +31,7 @@ export type CalendarDay = {
   isShabbos?: boolean;
   isRoshChodesh?: boolean;
   specialTimes?: SpecialTime[];
+  zmanimRows?: Array<{label:string;time:string}>;
   hebrewFullDate?: string;
   shulScheduleRows?: Array<{label:string;time?:string;note?:string}>;
 };
