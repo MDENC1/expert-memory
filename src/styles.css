@@ -1124,3 +1124,48 @@ body{color:#172b26}
 @media(max-width:520px){
   .zmanDefaultsGrid{grid-template-columns:1fr}
 }
+
+/* MyZmanim location verification */
+.locationVerifyBox{
+  margin-top:12px;
+  display:grid;
+  gap:3px;
+  padding:10px 12px;
+  border:1px solid #d8e3df;
+  border-radius:9px;
+  background:#f8fbfa;
+  color:#4f625c;
+}
+.locationVerifyBox strong{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:#263c35;
+}
+.locationVerifyBox span{
+  font-size:10px;
+  line-height:1.35;
+}
+.locationVerifyBox small{
+  font-size:9px;
+  color:#6f817b;
+}
+.locationVerifyBox.checking{
+  border-color:#bfd3eb;
+  background:#f2f7fd;
+}
+.locationVerifyBox.verified{
+  border-color:#b8dfc7;
+  background:#eef9f2;
+}
+.locationVerifyBox.verified strong{
+  color:#21643d;
+}
+.locationVerifyBox.error{
+  border-color:#e3bcbc;
+  background:#fff4f4;
+}
+.locationVerifyBox.error strong{
+  color:#873f3f;
+}
