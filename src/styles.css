@@ -1356,3 +1356,68 @@ body{color:#172b26}
     width:100%;
   }
 }
+
+/* Regular-schedule defaults inside focused special-date setup */
+.focusedSpecialCard.cholHamoedGroup{
+  border-color:#bdd7ce;
+  background:#fbfefd;
+}
+.focusedSpecialRow.regularDefaultRow{
+  grid-template-columns:minmax(170px,1fr) minmax(190px,1.15fr) 150px auto;
+  align-items:end;
+}
+.regularTimeDefault{
+  min-height:62px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:3px;
+  padding:8px 10px;
+  border:1px solid #cfe0da;
+  border-radius:8px;
+  background:#f4faf7;
+}
+.regularTimeDefault>span{
+  font-size:9px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:#657a72;
+}
+.regularTimeDefault>strong{
+  font-size:13px;
+  color:#244b3f;
+}
+.regularTimeDefault>small,
+.focusedSpecialRow label>small{
+  font-size:9px;
+  line-height:1.25;
+  color:#6c8078;
+}
+.regularTimeDateList{
+  display:flex;
+  flex-wrap:wrap;
+  gap:3px 8px;
+}
+.regularTimeDateList small{
+  white-space:nowrap;
+}
+.focusedSpecialRow.regularDefaultRow label{
+  min-width:0;
+}
+.focusedSpecialRow.regularDefaultRow input[type="time"]{
+  min-height:39px;
+}
+@media(max-width:980px){
+  .focusedSpecialRow.regularDefaultRow{
+    grid-template-columns:1fr 1fr;
+  }
+  .focusedSpecialRow.regularDefaultRow .focusedRemoveRow{
+    width:100%;
+  }
+}
+@media(max-width:620px){
+  .focusedSpecialRow.regularDefaultRow{
+    grid-template-columns:1fr;
+  }
+}
