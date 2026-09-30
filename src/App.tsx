@@ -8,9 +8,10 @@ import MonthlySetupPage from "./pages/MonthlySetupPage";
 import NoticesPage from "./pages/NoticesPage";
 import DevicesPage from "./pages/DevicesPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import { PILOT_SHUL_ID, supabase } from "./lib/supabase";
 
-type Tab = "dashboard" | "calendar" | "monthly" | "notices" | "devices" | "settings" | "super";
+type Tab = "dashboard" | "calendar" | "monthly" | "notices" | "devices" | "settings" | "super" | "onboarding";
 
 export type LiveDevice = {
   id: string;
@@ -213,6 +214,7 @@ function buildLiveDay(
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [currentShulId,setCurrentShulId] = useState(()=>localStorage.getItem("magnets.currentShulId") || PILOT_SHUL_ID);
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>(seedDays);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [shulName,setShulName] = useState("Loading shul…");
@@ -248,13 +250,13 @@ export default function App() {
       setLoading(true); setLoadError("");
       const today = localIsoDate();
       const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes] = await Promise.all([
-        supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",PILOT_SHUL_ID).single(),
-        supabase.from("magnets").select("*").eq("shul_id",PILOT_SHUL_ID).order("device_code"),
-        supabase.from("notices_events").select("*").eq("shul_id",PILOT_SHUL_ID).is("archived_at",null).order("display_start"),
-        supabase.from("schedule_entries").select("*").eq("shul_id",PILOT_SHUL_ID).eq("active",true).order("day_of_week").order("sort_order"),
-        supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",PILOT_SHUL_ID).eq("sent_on",today),
-        supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",PILOT_SHUL_ID).eq("event_date",today).maybeSingle(),
-        supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",PILOT_SHUL_ID).eq("event_date",today).eq("active",true).order("sort_order")
+        supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",currentShulId).single(),
+        supabase.from("magnets").select("*").eq("shul_id",currentShulId).order("device_code"),
+        supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
+        supabase.from("schedule_entries").select("*").eq("shul_id",currentShulId).eq("active",true).order("day_of_week").order("sort_order"),
+        supabase.from("immediate_pushes").select("id",{count:"exact",head:true}).eq("shul_id",currentShulId).eq("sent_on",today),
+        supabase.from("special_schedule_days").select("event_date,title,replace_normal_schedule").eq("shul_id",currentShulId).eq("event_date",today).maybeSingle(),
+        supabase.from("special_schedule_entries").select("event_date,title,event_time,approximate,note,sort_order").eq("shul_id",currentShulId).eq("event_date",today).eq("active",true).order("sort_order")
       ]);
       if(cancelled) return;
       const firstError = shulRes.error || deviceRes.error || noticeRes.error || scheduleRes.error || pushRes.error || specialDayRes.error || specialEntryRes.error;
@@ -275,15 +277,15 @@ export default function App() {
     loadLiveData();
 
     const channel=supabase.channel("pilot-live-admin")
-      .on("postgres_changes",{event:"*",schema:"public",table:"magnets",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"notices_events",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"schedule_entries",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_days",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
-      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_entries",filter:`shul_id=eq.${PILOT_SHUL_ID}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"magnets",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"notices_events",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"schedule_entries",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_days",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
+      .on("postgres_changes",{event:"*",schema:"public",table:"special_schedule_entries",filter:`shul_id=eq.${currentShulId}`},()=>loadLiveData())
       .subscribe();
 
     return ()=>{cancelled=true; supabase.removeChannel(channel);};
-  },[]);
+  },[currentShulId]);
 
   return (
     <div className="appShell">
@@ -339,6 +341,7 @@ export default function App() {
             scheduleEntries={scheduleEntries}
             shulName={shulName}
             postalCode={postalCode}
+            shulId={currentShulId}
           />
         )}
 
@@ -368,7 +371,17 @@ export default function App() {
           </>
         )}
 
-        {tab === "super" && <SuperAdminPage />}
+        {tab === "super" && <SuperAdminPage onNewOrganization={()=>setTab("onboarding")} />}
+        {tab === "onboarding" && (
+          <OnboardingPage
+            onCancel={()=>setTab("super")}
+            onComplete={(shulId)=>{
+              localStorage.setItem("magnets.currentShulId",shulId);
+              setCurrentShulId(shulId);
+              setTab("dashboard");
+            }}
+          />
+        )}
       </main>
     </div>
   );
