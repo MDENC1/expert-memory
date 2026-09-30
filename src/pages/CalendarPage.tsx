@@ -48,6 +48,55 @@ type ZmanimBatch = {
   sources?: Record<string,Record<string,string>>;
 };
 
+type ZmanDefaults = {
+  dawn:string;
+  shema:string;
+  midday:string;
+  mincha:string;
+  nightfall:string;
+};
+
+const DEFAULT_ZMAN_DEFAULTS:ZmanDefaults={
+  dawn:"72fix",
+  shema:"gra",
+  midday:"standard",
+  mincha:"gra",
+  nightfall:"gra"
+};
+
+function sourceFromShulDefault(family:string,defaults:ZmanDefaults){
+  if(family==="dawn")return defaults.dawn==="ben_ish" ? "dawn_benish" : "dawn_72fix";
+  if(family==="sunrise")return "sunrise_default";
+  if(family==="shema"){
+    if(defaults.shema==="ben_ish")return "shema_benish";
+    if(defaults.shema==="ma72")return "shema_ma72fix";
+    return "shema_gra";
+  }
+  if(family==="midday")return defaults.midday==="ben_ish" ? "midday_benish" : "midday";
+  if(family==="mincha_gedolah"){
+    if(defaults.mincha==="ben_ish")return "mincha_benish";
+    if(defaults.mincha==="ma72")return "mincha_ma72fix";
+    return "mincha_gra";
+  }
+  if(family==="mincha_ketana"){
+    if(defaults.mincha==="ben_ish")return "ketana_benish";
+    if(defaults.mincha==="ma72")return "ketana_ma72fix";
+    return "ketana_gra";
+  }
+  if(family==="plag"){
+    if(defaults.mincha==="ben_ish")return "plag_benish";
+    if(defaults.mincha==="ma72")return "plag_ma72fix";
+    return "plag_gra";
+  }
+  if(family==="sunset")return "sunset_default";
+  if(family==="nightfall"){
+    if(defaults.nightfall==="ben_ish")return "night_benish";
+    if(defaults.nightfall==="rt72")return "night_72fix";
+    return "night_gra180";
+  }
+  return "";
+}
+
 type ScheduleOverride = {
   id: string;
   event_date: string;
@@ -170,6 +219,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [zmanimError,setZmanimError] = useState("");
   const [zmanimSource,setZmanimSource] = useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
+  const [zmanDefaults,setZmanDefaults] = useState<ZmanDefaults>(DEFAULT_ZMAN_DEFAULTS);
   const [overrides,setOverrides] = useState<ScheduleOverride[]>([]);
   const [editRows,setEditRows] = useState<EditRow[]>([]);
   const [savingDay,setSavingDay] = useState(false);
@@ -186,6 +236,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setError("");
     setZmanimError("");
     setZmanimSource("");
+    setZmanDefaults(DEFAULT_ZMAN_DEFAULTS);
   },[shulId]);
 
   const year=viewDate.getFullYear();
@@ -229,7 +280,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .order("event_date")
           .order("sort_order"),
         supabase.from("zmanim_settings")
-          .select("fast_end_minutes")
+          .select("fast_end_minutes,zman_defaults")
           .eq("shul_id",shulId)
           .maybeSingle()
       ]);
@@ -274,6 +325,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         });
         if(zmanimSettingsRes.data?.fast_end_minutes){
           setShabbosEndMinutes(Number(zmanimSettingsRes.data.fast_end_minutes));
+        }
+        if(zmanimSettingsRes.data?.zman_defaults){
+          setZmanDefaults({
+            ...DEFAULT_ZMAN_DEFAULTS,
+            ...(zmanimSettingsRes.data.zman_defaults as Partial<ZmanDefaults>)
+          });
         }
       }
 
@@ -441,7 +498,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   };
 
   const resolveScheduleRuleTime=(date:string,r:LiveScheduleEntry)=>{
-    const source=r.timing_source||"";
+    const source=(r.use_shul_zman_default&&r.zman_family)
+      ? sourceFromShulDefault(r.zman_family,zmanDefaults)
+      : (r.timing_source||"");
     const map=source==="plag"
       ? zmanim.plagHaMincha
       : source==="sunset"
