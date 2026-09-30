@@ -20,10 +20,11 @@ type ZmanSource =
   | "ketana_gra" | "ketana_benish" | "ketana_ma72fix"
   | "plag_gra" | "plag_benish" | "plag_ma72fix"
   | "sunset_default"
-  | "night_gra180" | "night_benish" | "night_72fix";
+  | "night_gra180" | "night_benish" | "night_72fix"
+  | "shabbos_end";
 type RoundMode = "exact" | "earlier" | "later";
 type GroupPeriod = "individual" | "week_earliest" | "month_earliest";
-type ZmanFamilyKey = "dawn" | "sunrise" | "shema" | "midday" | "mincha_gedolah" | "mincha_ketana" | "plag" | "sunset" | "nightfall";
+type ZmanFamilyKey = "dawn" | "sunrise" | "shema" | "midday" | "mincha_gedolah" | "mincha_ketana" | "plag" | "sunset" | "nightfall" | "shabbos_end";
 type ZmanDefaultCategory = "dawn" | "shema" | "midday" | "mincha" | "nightfall";
 type ZmanDefaults = Record<ZmanDefaultCategory,string>;
 
@@ -118,6 +119,9 @@ const ZMAN_OPTIONS:Record<Service,ZmanFamilyOption[]>={
       {key:"night_gra180",label:"GRA",method:"gra"},
       {key:"night_benish",label:"Ben Ish",method:"ben_ish"},
       {key:"night_72fix",label:"Rabbeinu Tam — 72 minutes after sunset",method:"rt72"}
+    ]},
+    {key:"shabbos_end",label:"Shabbos / Yom Tov Ends",methods:[
+      {key:"shabbos_end",label:"Use the shul's Shabbos / Yom Tov end setting",method:"shabbos_end"}
     ]}
   ]
 };
@@ -356,8 +360,8 @@ const initialRules:MinyanRule[]=[
   },
   {
     id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
-    mode:"zman",fixedTime:"",source:"night_gra180",offset:0,direction:"after",
-    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"nightfall",useShulDefault:true
+    mode:"zman",fixedTime:"",source:"shabbos_end",offset:0,direction:"after",
+    roundMode:"exact",groupPeriod:"individual",followsText:"",zmanFamily:"shabbos_end",useShulDefault:false
   }
 ];
 
@@ -1079,7 +1083,7 @@ export default function OnboardingPage({onCancel,onComplete,mode="create",shulId
               <div className="zmanDefaultsHead">
                 <div>
                   <h3>Zmanim Defaults</h3>
-                  <p>Used automatically wherever that calculation applies. Any individual minyan can override the shul default below.</p>
+                  <p>Used automatically wherever that calculation applies. Shabbos / Yom Tov ending time is separate and can be used directly for Motzei Shabbos Maariv.</p>
                 </div>
               </div>
               <div className="zmanDefaultsGrid">
@@ -1108,7 +1112,7 @@ export default function OnboardingPage({onCancel,onComplete,mode="create",shulId
                   </select>
                 </label>
                 <label className="onboardField">
-                  <span>Tzeis / Maariv</span>
+                  <span>Tzeis calculation</span>
                   <select value={zmanDefaults.nightfall} onChange={e=>setZmanDefaults(v=>({...v,nightfall:e.target.value}))}>
                     {DEFAULT_CHOICES.nightfall.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}
                   </select>
