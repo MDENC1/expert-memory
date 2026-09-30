@@ -198,31 +198,50 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
         <div>
           <span className="eyebrow">New shul onboarding</span>
           <h1>Get to a live dashboard in under 5 minutes</h1>
-          <p>Account → shul basics → weekly schedule → dashboard.</p>
+          <p>Two short steps: create your admin login, then confirm the shul's standard schedule.</p>
         </div>
         <div className="onboardingProgress">
           <span className={step>=1?"done":""}>1 Account</span>
-          <span className={step>=2?"done":""}>2 Shul Setup</span>
+          <span className={step>=2?"done":""}>2 Shul & Schedule</span>
         </div>
       </div>
 
       {step===1 ? (
         <div className="panel onboardingCard">
           <div className="panelHead">
-            <div><span className="eyebrow">Step 1 of 2</span><h2>{authMode==="signup"?"Create admin account":"Sign in"}</h2></div>
+            <div>
+              <span className="eyebrow">Step 1 of 2 · target: under 1 minute</span>
+              <h2>{authMode==="signup"?"Create your admin account":"Sign in to your admin account"}</h2>
+              <p className="helperText">
+                {authMode==="signup"
+                  ?"Use the email you'll use to manage this shul. That's all we need for the account."
+                  :"Use the same email and password you used when you created the account."}
+              </p>
+            </div>
           </div>
-          <div className="onboardForm">
-            <label className="onboardField"><span>Email</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/></label>
-            <label className="onboardField"><span>Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete={authMode==="signup"?"new-password":"current-password"}/><small>Minimum 6 characters for this pilot.</small></label>
-          </div>
-          {error&&<div className="onboardError">{error}</div>}
-          {accountStatus&&<div className="daySaveMessage">{accountStatus}</div>}
-          <div className="onboardActions">
-            <button className="secondary" onClick={()=>{setAuthMode(v=>v==="signup"?"signin":"signup");setError("");}}>
-              {authMode==="signup"?"I already have an account":"Create a new account"}
-            </button>
-            <button className="primary" disabled={busy} onClick={handleAccount}>{busy?"Working...":authMode==="signup"?"Create Account & Continue":"Sign In & Continue"}</button>
-          </div>
+          <form onSubmit={e=>{e.preventDefault();void handleAccount();}}>
+            <div className="onboardForm">
+              <label className="onboardField">
+                <span>Email</span>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" autoFocus placeholder="you@example.com"/>
+              </label>
+              <label className="onboardField">
+                <span>Password</span>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete={authMode==="signup"?"new-password":"current-password"} placeholder="6+ characters"/>
+                <small>{authMode==="signup"?"At least 6 characters. You can press Enter to continue.":"Press Enter to continue."}</small>
+              </label>
+            </div>
+            {error&&<div className="onboardError">{error}</div>}
+            {accountStatus&&<div className="daySaveMessage">{accountStatus}</div>}
+            <div className="onboardActions">
+              <button type="button" className="secondary" onClick={()=>{setAuthMode(v=>v==="signup"?"signin":"signup");setError("");setAccountStatus("");}}>
+                {authMode==="signup"?"Already have an account? Sign in":"Need an account? Create one"}
+              </button>
+              <button type="submit" className="primary" disabled={busy}>
+                {busy?"Working...":authMode==="signup"?"Create Account & Continue":"Sign In & Continue"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : (
         <div className="panel onboardingCard">
