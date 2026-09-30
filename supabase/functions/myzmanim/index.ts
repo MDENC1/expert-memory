@@ -33,11 +33,13 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const postalCode = String(body.postal_code || "").trim();
+    const countryCode = String(body.country_code || "").toUpperCase();
     let locationId = body.location_id ? String(body.location_id) : "";
 
     const singleDate = body.date ? String(body.date) : "";
     const startDate = body.start_date ? String(body.start_date) : singleDate;
     const endDate = body.end_date ? String(body.end_date) : singleDate;
+
     if (!startDate || !endDate) throw new Error("date or start_date/end_date is required.");
 
     if (!locationId) {
@@ -88,8 +90,19 @@ Deno.serve(async (req) => {
       return { date, data };
     }));
 
+    const countryNames: Record<string,string> = {
+      US: "United States",
+      GB: "United Kingdom",
+      IL: "Israel",
+    };
+
     for (const { date, data } of results) {
       if (!place) {
+        const returnedCountry = data?.Place?.Country ?? null;
+        if (countryCode && countryNames[countryCode] && returnedCountry && returnedCountry !== countryNames[countryCode]) {
+          throw new Error(`Postal code matched ${returnedCountry}, not ${countryNames[countryCode]}`);
+        }
+
         place = {
           name: data?.Place?.NameShort ?? null,
           city: data?.Place?.City ?? null,
