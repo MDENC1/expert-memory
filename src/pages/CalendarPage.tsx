@@ -41,6 +41,11 @@ type SpecialEntry = {
 type ZmanimBatch = {
   plagHaMincha?: Record<string,string>;
   sunset?: Record<string,string>;
+  sunrise?: Record<string,string>;
+  latestShema?: Record<string,string>;
+  midday?: Record<string,string>;
+  candleLighting?: Record<string,string>;
+  sources?: Record<string,Record<string,string>>;
 };
 
 type ScheduleOverride = {
@@ -190,6 +195,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const firstDow=new Date(year,month,1,12).getDay();
   const startDate=`${year}-${pad(month+1)}-01`;
   const endDate=`${year}-${pad(month+1)}-${pad(new Date(year,month+1,0).getDate())}`;
+  const zmanimStartDate=isoDate(new Date(year,month,1-6,12));
+  const zmanimEndDate=isoDate(new Date(year,month+1,6,12));
 
   useEffect(()=>{
     let cancelled=false;
@@ -236,7 +243,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
       const zmanimPromise=postalCode
         ? supabase.functions.invoke("myzmanim",{
-            body:{postal_code:postalCode,country_code:countryCode,start_date:startDate,end_date:endDate}
+            body:{postal_code:postalCode,country_code:countryCode,start_date:zmanimStartDate,end_date:zmanimEndDate}
           })
             .then(({data,error})=>{
               if(error)throw error;
@@ -286,10 +293,24 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       }else{
         const wrapped=zmanimRes as any;
         const next=(wrapped.times||{}) as ZmanimBatch;
-        setZmanim(prev=>({
-          plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
-          sunset:{...(prev.sunset||{}),...(next.sunset||{})}
-        }));
+        setZmanim(prev=>{
+          const mergedSources:{[key:string]:Record<string,string>}={...(prev.sources||{})};
+          for(const [sourceKey,sourceMap] of Object.entries(next.sources||{})){
+            mergedSources[sourceKey]={
+              ...(mergedSources[sourceKey]||{}),
+              ...(sourceMap||{})
+            };
+          }
+          return {
+            plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
+            sunset:{...(prev.sunset||{}),...(next.sunset||{})},
+            sunrise:{...(prev.sunrise||{}),...(next.sunrise||{})},
+            latestShema:{...(prev.latestShema||{}),...(next.latestShema||{})},
+            midday:{...(prev.midday||{}),...(next.midday||{})},
+            candleLighting:{...(prev.candleLighting||{}),...(next.candleLighting||{})},
+            sources:mergedSources
+          };
+        });
         setZmanimSource(wrapped.source||"");
         setZmanimError("");
       }
@@ -429,8 +450,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   };
 
   const resolveScheduleRuleTime=(date:string,r:LiveScheduleEntry)=>{
-    if(r.timing_source!=="plag"&&r.timing_source!=="sunset")return "";
-    const map=r.timing_source==="plag" ? zmanim.plagHaMincha : zmanim.sunset;
+    const source=r.timing_source||"";
+    const map=source==="plag"
+      ? zmanim.plagHaMincha
+      : source==="sunset"
+        ? zmanim.sunset
+        : zmanim.sources?.[source];
     if(!map)return "";
 
     const period=r.group_period || (r.use_weekly_earliest ? "week_earliest" : "individual");
@@ -614,9 +639,21 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     // to an incorrect regular or Shabbos schedule.
     if(yomTovInfoForDate(date))return [];
 
-    return scheduleEntries
-      .filter(r=>r.day_of_week===d.getDay())
-      .map(r=>({label:r.display_name||r.service_type.replaceAll("_"," "),time:weeklyRowText(date,r),note:""}));
+    const dayRules=scheduleEntries.filter(r=>r.day_of_week===d.getDay());
+    const maarivFollowsMincha=dayRules.some(r=>
+      (r.service_type||"").toLowerCase()==="maariv" && r.timing_source==="follows"
+    );
+
+    return dayRules
+      .filter(r=>!((r.service_type||"").toLowerCase()==="maariv" && r.timing_source==="follows"))
+      .map(r=>{
+        const service=(r.service_type||"").toLowerCase();
+        let label=r.display_name||r.service_type.replaceAll("_"," ");
+        if(maarivFollowsMincha && service==="mincha" && r.timing_source!=="none"){
+          label=label.replace(/\s*\/\s*Maariv$/i,"")+" / Maariv";
+        }
+        return {label,time:weeklyRowText(date,r),note:""};
+      });
   };
 
   const selectedDay=selected.length===1 ? selected[0] : undefined;
@@ -679,6 +716,13 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       ? selectedSpecial.title
       : yomTovInfoForDate(selectedCell.date)?.name),
     specialTimes:keyTimesForDate(selectedCell.date),
+    zmanimRows:[
+      {label:"Netz",time:minutesToDisplay(timeMinutesFromIso(zmanim.sunrise?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.sunrise?.[selectedCell.date])!==null},
+      {label:"Latest Shema",time:minutesToDisplay(timeMinutesFromIso(zmanim.latestShema?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.latestShema?.[selectedCell.date])!==null},
+      {label:"Chatzos",time:minutesToDisplay(timeMinutesFromIso(zmanim.midday?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.midday?.[selectedCell.date])!==null},
+      {label:"Plag",time:minutesToDisplay(timeMinutesFromIso(zmanim.plagHaMincha?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.plagHaMincha?.[selectedCell.date])!==null},
+      {label:"Shkia",time:minutesToDisplay(timeMinutesFromIso(zmanim.sunset?.[selectedCell.date])??0),available:timeMinutesFromIso(zmanim.sunset?.[selectedCell.date])!==null}
+    ].filter(row=>row.available).map(({label,time})=>({label,time})),
     shulScheduleRows:selectedRows
   } : undefined;
 
