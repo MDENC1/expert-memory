@@ -223,6 +223,7 @@ export default function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [shulName,setShulName] = useState("Loading shul…");
   const [postalCode,setPostalCode] = useState("");
+  const [countryCode,setCountryCode] = useState("US");
   const [devices,setDevices] = useState<LiveDevice[]>([]);
   const [scheduleEntries,setScheduleEntries] = useState<LiveScheduleEntry[]>([]);
   const [specialDay,setSpecialDay] = useState<SpecialScheduleDay|undefined>();
@@ -315,7 +316,7 @@ export default function App() {
       setLoading(true); setLoadError("");
       const today = localIsoDate();
       const [shulRes,deviceRes,noticeRes,scheduleRes,pushRes,specialDayRes,specialEntryRes] = await Promise.all([
-        supabase.from("shuls").select("id,name,postal_code,timezone").eq("id",currentShulId).maybeSingle(),
+        supabase.from("shuls").select("id,name,country_code,postal_code,timezone").eq("id",currentShulId).maybeSingle(),
         supabase.from("magnets").select("*").eq("shul_id",currentShulId).order("device_code"),
         supabase.from("notices_events").select("*").eq("shul_id",currentShulId).is("archived_at",null).order("display_start"),
         supabase.from("schedule_entries").select("*").eq("shul_id",currentShulId).eq("active",true).order("day_of_week").order("sort_order"),
@@ -337,6 +338,7 @@ export default function App() {
       } else {
         setShulName(shulRes.data?.name || "Shul");
         setPostalCode(shulRes.data?.postal_code || "");
+        setCountryCode(shulRes.data?.country_code || "US");
         setDevices((deviceRes.data || []) as LiveDevice[]);
         setNotices((noticeRes.data || []).map(mapNotice));
         setScheduleEntries((scheduleRes.data || []) as LiveScheduleEntry[]);
@@ -413,6 +415,7 @@ export default function App() {
             scheduleEntries={scheduleEntries}
             shulName={shulName}
             postalCode={postalCode}
+            countryCode={countryCode}
             shulId={currentShulId}
           />
         )}
