@@ -445,7 +445,7 @@ export default function OnboardingPage({onCancel,onComplete,mode="create",shulId
           .eq("id",shulId)
           .maybeSingle(),
         supabase.from("zmanim_settings")
-          .select("country_code,postal_code,myzmanim_location_id,fast_end_minutes,zman_defaults,location_metadata")
+          .select("country_code,postal_code,myzmanim_location_id,shabbos_yom_tov_end_minutes,zman_defaults,location_metadata")
           .eq("shul_id",shulId)
           .maybeSingle(),
         supabase.from("schedule_entries")
@@ -471,7 +471,7 @@ export default function OnboardingPage({onCancel,onComplete,mode="create",shulId
       const nextTimezone=String(shulRes.data.timezone||"");
       const nextLocationId=String(zmanimRes.data?.myzmanim_location_id||"");
       const metadata=(zmanimRes.data?.location_metadata||{}) as any;
-      const endMinutes=Number(zmanimRes.data?.fast_end_minutes||60);
+      const endMinutes=Number(zmanimRes.data?.shabbos_yom_tov_end_minutes||60);
 
       setName(String(shulRes.data.name||""));
       setCountry(nextCountry);
