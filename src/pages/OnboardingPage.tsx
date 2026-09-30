@@ -77,6 +77,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
   const [fridayOffset,setFridayOffset]=useState(10);
   const [shabbosLateOffset,setShabbosLateOffset]=useState(10);
   const [shabbosEndMinutes,setShabbosEndMinutes]=useState(60);
+  const [showAdvancedRules,setShowAdvancedRules]=useState(false);
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data})=>{
@@ -247,9 +248,9 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
         <div className="panel onboardingCard">
           <div className="panelHead">
             <div>
-              <span className="eyebrow">Step 2 of 2</span>
+              <span className="eyebrow">Step 2 of 2 · target: under 4 minutes</span>
               <h2>Shul & Standard Schedule</h2>
-              <p className="helperText">These become the automatic weekly rules. Individual dates can still be overridden later in Calendar.</p>
+              <p className="helperText">Confirm the basics below. Everything can be changed later in Calendar or Settings.</p>
             </div>
             {accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
           </div>
@@ -263,7 +264,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           </div>
 
           <div className="onboardSection">
-            <h3>Fixed davening times</h3>
+            <h3>Standard davening times</h3>
             <div className="onboardGrid four">
               {timeField("Sunday Shacharis",sundayShacharis,setSundayShacharis)}
               {timeField("Mon–Fri Shacharis",weekdayShacharis,setWeekdayShacharis)}
@@ -273,18 +274,38 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           </div>
 
           <div className="onboardSection">
-            <h3>Automatic weekly rules</h3>
-            <div className="onboardRuleGrid">
-              <label><span>Sun–Thu Early Mincha</span><div><b>Plag minus</b><input type="number" min="0" max="120" value={earlyOffset} onChange={e=>setEarlyOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
-              <label><span>Sun–Thu Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={lateOffset} onChange={e=>setLateOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
-              <label><span>Friday Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={fridayOffset} onChange={e=>setFridayOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Friday.</small></label>
-              <label><span>Shabbos Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={shabbosLateOffset} onChange={e=>setShabbosLateOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Shabbos.</small></label>
-              <label><span>Shabbos/Yom Tov end threshold</span><div><b>Sunset plus</b><input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/><b>min</b></div><small>Used for Shabbos Ends and after-nightfall Yom Tov transitions.</small></label>
+            <div className="onboardRulesHead">
+              <div>
+                <h3>Automatic Mincha / Maariv rules</h3>
+                <p className="helperText">These are already filled in. Most shuls should only need to review them.</p>
+              </div>
+              <button type="button" className="secondary compactButton" onClick={()=>setShowAdvancedRules(v=>!v)}>
+                {showAdvancedRules?"Hide timing details":"Edit timing rules"}
+              </button>
             </div>
+
+            <div className="ruleSummary">
+              <span><b>Sun–Thu Early</b> Plag − {earlyOffset} min</span>
+              <span><b>Sun–Thu Late</b> Sunset − {lateOffset} min</span>
+              <span><b>Friday Mincha</b> Sunset − {fridayOffset} min</span>
+              <span><b>Shabbos Late</b> Sunset − {shabbosLateOffset} min</span>
+              <span><b>Shabbos / Yom Tov Ends</b> Sunset + {shabbosEndMinutes} min</span>
+            </div>
+
+            {showAdvancedRules&&(
+              <div className="onboardRuleGrid advancedRuleGrid">
+                <label><span>Sun–Thu Early Mincha</span><div><b>Plag minus</b><input type="number" min="0" max="120" value={earlyOffset} onChange={e=>setEarlyOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
+                <label><span>Sun–Thu Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={lateOffset} onChange={e=>setLateOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
+                <label><span>Friday Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={fridayOffset} onChange={e=>setFridayOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Friday.</small></label>
+                <label><span>Shabbos Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={shabbosLateOffset} onChange={e=>setShabbosLateOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Shabbos.</small></label>
+                <label><span>Shabbos/Yom Tov end threshold</span><div><b>Sunset plus</b><input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/><b>min</b></div><small>Used for Shabbos Ends and after-nightfall Yom Tov transitions.</small></label>
+              </div>
+            )}
           </div>
 
           {error&&<div className="onboardError">{error}</div>}
-          <div className="onboardActions">
+          <div className="onboardActions onboardStickyActions">
+            <span className="onboardReadyHint">If the defaults look right, you're done.</span>
             <button className="secondary" onClick={()=>setStep(1)}>Back to Account</button>
             <button className="primary onboardingFinish" disabled={busy} onClick={createShul}>{busy?"Creating shul...":"Create Shul & Open Dashboard"}</button>
           </div>
