@@ -797,3 +797,85 @@ body{color:#172b26}
 .onboardReadyHint{margin-right:auto;font-size:11px;font-weight:800;color:#587068}
 @media(max-width:950px){.ruleSummary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.ruleSummary{grid-template-columns:1fr 1fr}.onboardRulesHead{display:grid}.onboardStickyActions{position:static;margin:18px 0 0;padding:12px 0 0}}
+
+/* Clear minyan-by-minyan onboarding wizard */
+.setupBasicsCard{max-width:none}
+.onboardGrid.three{grid-template-columns:1.3fr .8fr 1fr}
+.minutesSetting{display:flex;align-items:center;gap:8px}
+.minutesSetting input{width:80px}
+.minutesSetting b{font-size:11px;color:#4e625b}
+
+.scheduleWizardLayout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.scheduleBuilder{display:grid;gap:16px}
+.scheduleInfoBox{display:grid;gap:4px;padding:13px 15px;border:1px solid #bcd4ff;border-radius:10px;background:#eef5ff;color:#204b87}
+.scheduleInfoBox strong{font-size:12px}
+.scheduleInfoBox span{font-size:11px;line-height:1.35}
+
+.serviceRuleSection{border:1px solid #dfe8e5;border-radius:12px;background:#fff;overflow:hidden}
+.serviceRuleHead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #e7eeec;background:#fbfcfc}
+.serviceRuleHead h3{margin:0;font-size:16px}
+.serviceRuleHead span{font-size:10px;color:#70817b}
+.compactAddButton{display:flex;align-items:center;gap:5px;padding:8px 11px;font-size:11px}
+.serviceRuleList{display:grid;gap:10px;padding:12px}
+
+.minyanRuleCard{display:grid;gap:11px;padding:12px;border:1px solid #dbe5e2;border-radius:10px;background:#fff}
+.minyanRuleHeader{display:flex;align-items:center;gap:8px}
+.minyanNameInput{flex:1;border:0;background:transparent;font-size:13px;font-weight:900;color:#1f3530;padding:2px 0}
+.minyanNameInput:focus{outline:none;border-bottom:1px solid #2f7d6d}
+.iconDangerButton{width:32px;height:32px;display:grid;place-items:center;border:0;background:transparent;color:#8a4a4a;border-radius:7px;cursor:pointer}
+.iconDangerButton:hover{background:#fff1f1}
+
+.minyanApplies{display:grid;gap:6px}
+.minyanApplies>span,.timingEditor label>span{font-size:10px;font-weight:900;color:#52655f;text-transform:uppercase;letter-spacing:.03em}
+.dayChoiceRow{display:flex;gap:6px;flex-wrap:wrap}
+.dayChoice{display:flex;align-items:center;gap:4px;padding:6px 8px;border:1px solid #cad8d3;border-radius:7px;background:#fff;cursor:pointer;font-size:10px;font-weight:800;color:#4c625b}
+.dayChoice input{display:none}
+.dayChoice.active{background:#e7f4ef;border-color:#79b9a5;color:#225a4c}
+
+.timingEditor{display:grid;grid-template-columns:1.25fr .8fr .8fr 1.1fr;gap:8px;align-items:end}
+.timingEditor label{display:grid;gap:5px}
+.timingEditor input,.timingEditor select{width:100%;border:1px solid #c5d3ce;border-radius:8px;padding:8px 9px;background:#fff;color:#18312a;font-size:11px;font-weight:800}
+.timingEditor .followsField{grid-column:span 2}
+.friendlyTimeInput{text-align:center}
+
+.ruleOptions{display:flex;gap:14px;flex-wrap:wrap;padding-top:2px}
+.ruleOptions label{display:flex;align-items:center;gap:6px;font-size:10px;color:#52655f;font-weight:700}
+.ruleOptions input{accent-color:#2f7d6d}
+.ruleSentence{font-size:10px;font-weight:900;color:#2e6758;background:#f3faf7;border-radius:7px;padding:7px 9px;width:max-content;max-width:100%}
+
+.coveragePanel{position:sticky;top:18px}
+.coverageCard{display:grid;gap:12px}
+.coverageTitle{display:flex;gap:9px;align-items:flex-start}
+.coverageTitle svg{color:#2f9a68;margin-top:1px}
+.coverageTitle h3{margin:0 0 3px;font-size:15px}
+.coverageTitle span{font-size:10px;color:#70817b}
+.coverageStatus{display:grid;gap:3px;padding:10px;border-radius:9px;background:#fff6e9;border:1px solid #ead5b0;color:#735b29}
+.coverageStatus.complete{background:#eaf8ef;border-color:#b9dfc7;color:#22643d}
+.coverageStatus strong{font-size:11px}
+.coverageStatus span{font-size:10px}
+.coverageTable{display:grid;border:1px solid #e1e9e6;border-radius:8px;overflow:hidden}
+.coverageHeader,.coverageRow{display:grid;grid-template-columns:1.2fr repeat(3,.8fr);align-items:center}
+.coverageHeader{background:#f6f9f8;padding:7px 8px;font-size:8px;text-align:center}
+.coverageRow{padding:7px 8px;border-top:1px solid #edf1ef;font-size:9px}
+.coverageRow strong{font-size:9px}
+.coverageDot{text-align:center;font-weight:900}
+.coverageDot.yes{color:#20a35d}
+.coverageDot.no{color:#b3bebb}
+.createShulButton,.fullWidthButton{width:100%}
+.createShulButton{margin-top:2px}
+
+@media(max-width:1080px){
+  .scheduleWizardLayout{grid-template-columns:1fr}
+  .coveragePanel{position:static}
+  .onboardGrid.three{grid-template-columns:1fr 1fr}
+}
+@media(max-width:760px){
+  .onboardGrid.three{grid-template-columns:1fr}
+  .timingEditor{grid-template-columns:1fr 1fr}
+  .timingEditor .followsField{grid-column:span 2}
+}
+@media(max-width:520px){
+  .timingEditor{grid-template-columns:1fr}
+  .timingEditor .followsField{grid-column:span 1}
+  .coverageHeader,.coverageRow{grid-template-columns:1.1fr repeat(3,.9fr)}
+}
