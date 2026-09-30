@@ -390,7 +390,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
                 <span>Zman</span>
                 <select value={rule.source} onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}>
                   <option value="plag">Plag</option>
-                  <option value="sunset">Sunset (Sikia)</option>
+                  <option value="sunset">Sunset (Shkia)</option>
                 </select>
               </label>
             </>
