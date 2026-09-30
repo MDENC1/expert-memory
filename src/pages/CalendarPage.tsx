@@ -170,6 +170,16 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [bulkEditRows,setBulkEditRows] = useState<BulkEditRow[]>([]);
   const [bulkSaveMessage,setBulkSaveMessage] = useState("");
 
+  useEffect(()=>{
+    setSelected([]);
+    setSpecialDays([]);
+    setSpecialEntries([]);
+    setOverrides([]);
+    setZmanim({});
+    setError("");
+    setZmanimError("");
+  },[shulId]);
+
   const year=viewDate.getFullYear();
   const month=viewDate.getMonth();
   const monthName=new Intl.DateTimeFormat("en-US",{month:"long",year:"numeric"}).format(viewDate);
@@ -262,7 +272,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     }
     loadMonth();
     return()=>{cancelled=true};
-  },[startDate,endDate,postalCode]);
+  },[startDate,endDate,postalCode,shulId]);
 
   const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
   const entriesMap=useMemo(()=>{
