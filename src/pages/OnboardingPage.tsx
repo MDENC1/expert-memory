@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Props = {
@@ -7,7 +7,38 @@ type Props = {
   onComplete: (shulId:string) => void;
 };
 
+type Service = "Shacharis" | "Mincha" | "Maariv";
+type RuleMode = "fixed" | "zman" | "follows";
+type ZmanSource = "plag" | "sunset";
+
+type MinyanRule = {
+  id:string;
+  service:Service;
+  name:string;
+  days:number[];
+  mode:RuleMode;
+  fixedTime:string;
+  source:ZmanSource;
+  offset:number;
+  direction:"before"|"after";
+  roundToFive:boolean;
+  sameTimeAcrossDays:boolean;
+  followsText:string;
+};
+
+const DAYS=[
+  {value:0,label:"Sun",full:"Sunday"},
+  {value:1,label:"Mon",full:"Monday"},
+  {value:2,label:"Tue",full:"Tuesday"},
+  {value:3,label:"Wed",full:"Wednesday"},
+  {value:4,label:"Thu",full:"Thursday"},
+  {value:5,label:"Fri",full:"Friday"},
+  {value:6,label:"Shabbos",full:"Shabbos"}
+] as const;
+
+const SERVICES:Service[]=["Shacharis","Mincha","Maariv"];
 const pad=(n:number)=>String(n).padStart(2,"0");
+const newId=()=>`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
 function parseFriendlyTime(value:string){
   const clean=value.trim().toUpperCase().replace(/\./g,"").replace(/\s+/g,"");
@@ -40,21 +71,83 @@ function normalizeFriendlyTime(value:string){
   return `${h%12||12}:${pad(m)} ${suffix}`;
 }
 
-function fixedRow(day:number,label:string,time:string,sort=10){
+const initialRules:MinyanRule[]=[
+  {
+    id:"weekday-shacharis",service:"Shacharis",name:"Weekday Shacharis",days:[1,2,3,4,5],
+    mode:"fixed",fixedTime:"6:45 AM",source:"sunset",offset:0,direction:"before",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"sunday-shacharis",service:"Shacharis",name:"Sunday Shacharis",days:[0],
+    mode:"fixed",fixedTime:"9:30 AM",source:"sunset",offset:0,direction:"before",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"shabbos-shacharis",service:"Shacharis",name:"Shabbos Shacharis",days:[6],
+    mode:"fixed",fixedTime:"9:00 AM",source:"sunset",offset:0,direction:"before",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"early-mincha",service:"Mincha",name:"Early Mincha",days:[0,1,2,3,4],
+    mode:"zman",fixedTime:"",source:"plag",offset:10,direction:"before",
+    roundToFive:true,sameTimeAcrossDays:true,followsText:""
+  },
+  {
+    id:"late-mincha",service:"Mincha",name:"Late Mincha",days:[0,1,2,3,4],
+    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    roundToFive:true,sameTimeAcrossDays:true,followsText:""
+  },
+  {
+    id:"friday-mincha",service:"Mincha",name:"Friday Mincha",days:[5],
+    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    roundToFive:true,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"shabbos-early-mincha",service:"Mincha",name:"Shabbos Early Mincha",days:[6],
+    mode:"fixed",fixedTime:"2:15 PM",source:"sunset",offset:0,direction:"before",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"shabbos-late-mincha",service:"Mincha",name:"Shabbos Late Mincha",days:[6],
+    mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+    roundToFive:true,sameTimeAcrossDays:false,followsText:""
+  },
+  {
+    id:"weekday-maariv",service:"Maariv",name:"Weekday Maariv",days:[0,1,2,3,4,5],
+    mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:"Follows Mincha"
+  },
+  {
+    id:"shabbos-maariv",service:"Maariv",name:"Shabbos Maariv",days:[6],
+    mode:"zman",fixedTime:"",source:"sunset",offset:60,direction:"after",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:""
+  }
+];
+
+function defaultNewRule(service:Service,index:number):MinyanRule{
+  if(service==="Shacharis"){
+    return {
+      id:newId(),service,name:`Shacharis Minyan ${index}`,days:[],
+      mode:"fixed",fixedTime:"7:00 AM",source:"sunset",offset:0,direction:"before",
+      roundToFive:false,sameTimeAcrossDays:false,followsText:""
+    };
+  }
+  if(service==="Mincha"){
+    return {
+      id:newId(),service,name:`Mincha Minyan ${index}`,days:[],
+      mode:"zman",fixedTime:"",source:"sunset",offset:10,direction:"before",
+      roundToFive:true,sameTimeAcrossDays:false,followsText:""
+    };
+  }
   return {
-    day_of_week:day,service_type:label.includes("Mincha")?"Mincha":label.includes("Maariv")?"Maariv":"Shacharis",
-    service_time:time,timing_source:"fixed",timing_offset_minutes:0,display_name:label,
-    sort_order:sort,active:true,use_weekly_earliest:false
+    id:newId(),service,name:`Maariv Minyan ${index}`,days:[],
+    mode:"follows",fixedTime:"",source:"sunset",offset:0,direction:"after",
+    roundToFive:false,sameTimeAcrossDays:false,followsText:"Follows Mincha"
   };
 }
 
-function ruleRow(day:number,label:string,source:"plag"|"sunset",offset:number,sort:number,weekly:boolean,group:string,follows?:string){
-  return {
-    day_of_week:day,service_type:label.includes("Maariv")&& !label.includes("Mincha")?"Maariv":"Mincha",
-    service_time:"",timing_source:source,timing_offset_minutes:offset,display_name:label,
-    sort_order:sort,active:true,round_to_minutes:5,round_direction:"down",
-    use_weekly_earliest:weekly,weekly_group:group,follows_text:follows||""
-  };
+function sourceLabel(source:ZmanSource){
+  return source==="plag" ? "Plag" : "Sunset (Shkia)";
 }
 
 export default function OnboardingPage({onCancel,onComplete}:Props){
@@ -68,16 +161,8 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
   const [name,setName]=useState("");
   const [zip,setZip]=useState("");
-  const [sundayShacharis,setSundayShacharis]=useState("9:30 AM");
-  const [weekdayShacharis,setWeekdayShacharis]=useState("6:45 AM");
-  const [shabbosShacharis,setShabbosShacharis]=useState("9:00 AM");
-  const [shabbosEarlyMincha,setShabbosEarlyMincha]=useState("2:15 PM");
-  const [earlyOffset,setEarlyOffset]=useState(10);
-  const [lateOffset,setLateOffset]=useState(10);
-  const [fridayOffset,setFridayOffset]=useState(10);
-  const [shabbosLateOffset,setShabbosLateOffset]=useState(10);
   const [shabbosEndMinutes,setShabbosEndMinutes]=useState(60);
-  const [showAdvancedRules,setShowAdvancedRules]=useState(false);
+  const [rules,setRules]=useState<MinyanRule[]>(initialRules);
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data})=>{
@@ -88,12 +173,21 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     });
   },[]);
 
-  const parsedTimes=useMemo(()=>({
-    sunday:parseFriendlyTime(sundayShacharis),
-    weekday:parseFriendlyTime(weekdayShacharis),
-    shabbos:parseFriendlyTime(shabbosShacharis),
-    shabbosEarly:parseFriendlyTime(shabbosEarlyMincha)
-  }),[sundayShacharis,weekdayShacharis,shabbosShacharis,shabbosEarlyMincha]);
+  const coverage=useMemo(()=>{
+    const matrix=DAYS.map(day=>({
+      day:day.value,
+      label:day.full,
+      covered:Object.fromEntries(SERVICES.map(service=>[
+        service,
+        rules.some(rule=>rule.service===service&&rule.days.includes(day.value))
+      ])) as Record<Service,boolean>
+    }));
+    const count=matrix.reduce((sum,row)=>sum+SERVICES.filter(service=>row.covered[service]).length,0);
+    return {matrix,count,complete:count===21};
+  },[rules]);
+
+  const invalidFixedRule=rules.find(rule=>rule.mode==="fixed"&&!parseFriendlyTime(rule.fixedTime));
+  const emptyDayRule=rules.find(rule=>rule.days.length===0);
 
   const handleAccount=async()=>{
     setBusy(true);setError("");setAccountStatus("");
@@ -113,7 +207,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
 
     const {data:{session}}=await supabase.auth.getSession();
     if(!session){
-      setAccountStatus("Account created. Confirm the email if Supabase asks you to, then return here and sign in.");
+      setAccountStatus("Account created. Confirm the email, then return here and sign in.");
       setAuthMode("signin");
       setBusy(false);return;
     }
@@ -123,35 +217,65 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     setBusy(false);
   };
 
+  const patchRule=(id:string,patch:Partial<MinyanRule>)=>{
+    setRules(current=>current.map(rule=>rule.id===id?{...rule,...patch}:rule));
+  };
+
+  const toggleDay=(id:string,day:number)=>{
+    setRules(current=>current.map(rule=>{
+      if(rule.id!==id)return rule;
+      const days=rule.days.includes(day)
+        ? rule.days.filter(value=>value!==day)
+        : [...rule.days,day].sort((a,b)=>a-b);
+      return {...rule,days};
+    }));
+  };
+
+  const addRule=(service:Service)=>{
+    const count=rules.filter(rule=>rule.service===service).length+1;
+    setRules(current=>[...current,defaultNewRule(service,count)]);
+  };
+
+  const deleteRule=(id:string)=>{
+    setRules(current=>current.filter(rule=>rule.id!==id));
+  };
+
   const createShul=async()=>{
     setError("");
     if(!name.trim()){setError("Enter the shul name.");return;}
     if(!/^\d{5}$/.test(zip)){setError("Enter a 5-digit ZIP code.");return;}
-    if(Object.values(parsedTimes).some(v=>!v)){setError("One of the fixed davening times is not valid.");return;}
+    if(!coverage.complete){setError("Finish the weekly coverage first. Every day needs Shacharis, Mincha, and Maariv.");return;}
+    if(emptyDayRule){setError(`${emptyDayRule.name} does not apply to any day. Select a day or delete that minyan.`);return;}
+    if(invalidFixedRule){setError(`Enter a valid time for ${invalidFixedRule.name}.`);return;}
 
     setBusy(true);
+
+    const serviceBase:Record<Service,number>={Shacharis:10,Mincha:30,Maariv:60};
     const rows:any[]=[];
 
-    rows.push(fixedRow(0,"Shacharis",parsedTimes.sunday,10));
-    rows.push(ruleRow(0,"Early Mincha / Maariv","plag",-earlyOffset,20,true,"early_mincha","Maariv follows"));
-    rows.push(ruleRow(0,"Late Mincha / Maariv","sunset",-lateOffset,30,true,"late_mincha","Maariv follows"));
-
-    for(let day=1;day<=4;day++){
-      rows.push(fixedRow(day,"Shacharis",parsedTimes.weekday,10));
-      rows.push(ruleRow(day,"Early Mincha / Maariv","plag",-earlyOffset,20,true,"early_mincha","Maariv follows"));
-      rows.push(ruleRow(day,"Late Mincha / Maariv","sunset",-lateOffset,30,true,"late_mincha","Maariv follows"));
-    }
-
-    rows.push(fixedRow(5,"Shacharis",parsedTimes.weekday,10));
-    rows.push(ruleRow(5,"Mincha / Maariv","sunset",-fridayOffset,20,false,"friday_mincha","Maariv follows"));
-
-    rows.push(fixedRow(6,"Shacharis",parsedTimes.shabbos,10));
-    rows.push(fixedRow(6,"Early Mincha",parsedTimes.shabbosEarly,20));
-    rows.push(ruleRow(6,"Late Mincha","sunset",-shabbosLateOffset,30,false,"shabbos_late_mincha"));
-    rows.push({
-      day_of_week:6,service_type:"Maariv",service_time:"",timing_source:"sunset",
-      timing_offset_minutes:shabbosEndMinutes,display_name:"Maariv",sort_order:40,active:true,
-      use_weekly_earliest:false,weekly_group:"shabbos_maariv",follows_text:"After Shabbos"
+    SERVICES.forEach(service=>{
+      const serviceRules=rules.filter(rule=>rule.service===service);
+      serviceRules.forEach((rule,index)=>{
+        const fixedTime=rule.mode==="fixed" ? parseFriendlyTime(rule.fixedTime) : "";
+        const signedOffset=rule.direction==="before" ? -Math.abs(rule.offset) : Math.abs(rule.offset);
+        rule.days.forEach(day=>{
+          rows.push({
+            day_of_week:day,
+            service_type:service,
+            service_time:fixedTime,
+            timing_source:rule.mode==="fixed"?"fixed":rule.mode==="follows"?"follows":rule.source,
+            timing_offset_minutes:rule.mode==="zman"?signedOffset:0,
+            display_name:rule.name,
+            sort_order:serviceBase[service]+index,
+            active:true,
+            round_to_minutes:rule.mode==="zman"&&rule.roundToFive?5:null,
+            round_direction:rule.mode==="zman"&&rule.roundToFive?"down":null,
+            use_weekly_earliest:rule.mode==="zman"?rule.sameTimeAcrossDays:false,
+            weekly_group:rule.mode==="zman"&&rule.sameTimeAcrossDays?`${service.toLowerCase()}-${rule.id}`:"",
+            follows_text:rule.mode==="follows"?(rule.followsText||"Dollows Mincha"):""
+          });
+        });
+      });
     });
 
     const {data,error:rpcError}=await supabase.rpc("create_shul_onboarding",{
@@ -178,19 +302,143 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     onComplete(shulId);
   };
 
-  const timeField=(label:string,value:string,setValue:(v:string)=>void,help?:string)=>(
-    <label className="onboardField">
-      <span>{label}</span>
-      <input
-        value={value}
-        onFocus={e=>e.currentTarget.select()}
-        onChange={e=>setValue(e.target.value)}
-        onBlur={e=>setValue(normalizeFriendlyTime(e.currentTarget.value))}
-        placeholder="6:45 AM"
-      />
-      {help&&<small>{help}</small>}
-    </label>
-  );
+  const renderRule=(rule:MinyanRule)=>{
+    const canFollow=rule.service==="Maariv";
+    return (
+      <div className="minyanRuleCard" key={rule.id}>
+        <div className="minyanRuleHeader">
+          <input
+            className="minyanNameInput"
+            value={rule.name}
+            onChange={e=>patchRule(rule.id,{name:e.target.value})}
+            aria-label={`${rule.service} minyan name`}
+          />
+          <button type="button" className="iconDangerButton" onClick={()=>deleteRule(rule.id)} aria-label={`Delete ${rule.name}`}>
+            <Trash2 size={16}/>
+          </button>
+        </div>
+
+        <div className="minyanApplies">
+          <span>Applies</span>
+          <div className="dayChoiceRow">
+            {DAYS.map(day=>(
+              <label className={rule.days.includes(day.value)?"dayChoice active":"dayChoice"} key={day.value}>
+                <input
+                  type="checkbox"
+                  checked={rule.days.includes(day.value)}
+                  onChange={()=>toggleDay(rule.id,day.value)}
+                />
+                <span>{day.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="timingEditor">
+          <label>
+            <span>Timing</span>
+            <select
+              value={rule.mode}
+              onChange={e=>{
+                const mode=e.target.value as RuleMode;
+                patchRule(rule.id,{
+                  mode,
+                  followsText:mode==="follows"?"Follows Mincha":rule.followsText
+                });
+              }}
+            >
+              <option value="fixed">Set time</option>
+              <option value="zman">Based on a zman</option>
+              {canFollow&&<option value="follows">Follows Mincha</option>}
+            </select>
+          </label>
+
+          {rule.mode==="fixed"&&(
+            <label>
+              <span>Time</span>
+              <input
+                className="friendlyTimeInput"
+                value={rule.fixedTime}
+                onFocus={e=>e.currentTarget.select()}
+                onChange={e=>patchRule(rule.id,{fixedTime:e.target.value})}
+                onBlur={e=>patchRule(rule.id,{fixedTime:normalizeFriendlyTime(e.currentTarget.value)})}
+                placeholder="6:45 AM"
+              />
+            </label>
+          )}
+
+          {rule.mode==="zman"&&(
+            <>
+              <label>
+                <span>Minutes</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="180"
+                  value={rule.offset}
+                  onChange={e=>patchRule(rule.id,{offset:Number(e.target.value)})}
+                />
+              </label>
+              <label>
+                <span>Direction</span>
+                <select value={rule.direction} onChange={e=>patchRule(rule.id,{direction:e.target.value as "before"|"after"})}>
+                  <option value="before">before</option>
+                  <option value="after">after</option>
+                </select>
+              </label>
+              <label>
+                <span>Zman</span>
+                <select value={rule.source} onChange={e=>patchRule(rule.id,{source:e.target.value as ZmanSource})}>
+                  <option value="plag">Plag</option>
+                  <option value="sunset">Sunset (Sikia)</option>
+                </select>
+              </label>
+            </>
+          )}
+
+          {rule.mode==="follows"&&(
+            <label className="followsField">
+              <span>Display</span>
+              <input
+                value={rule.followsText}
+                onChange={e=>patchRule(rule.id,{followsText:e.target.value})}
+                placeholder="Follows Mincha"
+              />
+            </label>
+          )}
+        </div>
+
+        {rule.mode==="zman"&&(
+          <div className="ruleOptions">
+            <label>
+              <input
+                type="checkbox"
+                checked={rule.roundToFive}
+                onChange={e=>patchRule(rule.id,{roundToFive:e.target.checked})}
+              />
+              <span>Round earlier to the nearest 5 minutes</span>
+            </label>
+            {rule.days.length>1&&(
+              <label>
+                <input
+                  type="checkbox"
+                  checked={rule.sameTimeAcrossDays}
+                  onChange={e=>patchRule(rule.id,{sameTimeAcrossDays:e.target.checked})}
+                />
+                <span>Use the same time for all selected days</span>
+              </label>
+            )}
+          </div>
+        )}
+
+        <div className="ruleSentence">
+          {rule.mode==="fixed"&&<span>{rule.fixedTime || "Set a time"}</span>}
+          {rule.mode==="zman"&&<span>{rule.offset} minutes {rule.direction} {sourceLabel(rule.source)}</span>}
+          {rule.mode==="follows"&&<span>{rule.followsText||"Follows Mincha"}</span>}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="onboardingPage">
@@ -199,11 +447,11 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
         <div>
           <span className="eyebrow">New shul onboarding</span>
           <h1>Get to a live dashboard in under 5 minutes</h1>
-          <p>Two short steps: create your admin login, then confirm the shul's standard schedule.</p>
+          <p>Create the account, then describe the shul's normal weekly minyanim.</p>
         </div>
         <div className="onboardingProgress">
           <span className={step>=1?"done":""}>1 Account</span>
-          <span className={step>=2?"done":""}>2 Shul & Schedule</span>
+          <span className={step>=2?"done":""}>2 Normal Schedule</span>
         </div>
       </div>
 
@@ -215,7 +463,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               <h2>{authMode==="signup"?"Create your admin account":"Sign in to your admin account"}</h2>
               <p className="helperText">
                 {authMode==="signup"
-                  ?"Use the email you'll use to manage this shul. That's all we need for the account."
+                  ?"Use the email you'll use to manage this shul."
                   :"Use the same email and password you used when you created the account."}
               </p>
             </div>
@@ -229,7 +477,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
               <label className="onboardField">
                 <span>Password</span>
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete={authMode==="signup"?"new-password":"current-password"} placeholder="6+ characters"/>
-                <small>{authMode==="signup"?"At least 6 characters. You can press Enter to continue.":"Press Enter to continue."}</small>
+                <small>At least 6 characters.</small>
               </label>
             </div>
             {error&&<div className="onboardError">{error}</div>}
@@ -245,71 +493,105 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
           </form>
         </div>
       ) : (
-        <div className="panel onboardingCard">
-          <div className="panelHead">
-            <div>
-              <span className="eyebrow">Step 2 of 2 · target: under 4 minutes</span>
-              <h2>Shul & Standard Schedule</h2>
-              <p className="helperText">Confirm the basics below. Everything can be changed later in Calendar or Settings.</p>
-            </div>
-            {accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
-          </div>
-
-          <div className="onboardSection">
-            <h3>Shul basics</h3>
-            <div className="onboardGrid two">
-              <label className="onboardField"><span>Shul name</span><input value={name} onChange={e=>setName(e.target.value)} placeholder="Example Shul"/></label>
-              <label className="onboardField"><span>ZIP code</span><input value={zip} inputMode="numeric" onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="44118"/><small>Used for automatic zmanim.</small></label>
-            </div>
-          </div>
-
-          <div className="onboardSection">
-            <h3>Standard davening times</h3>
-            <div className="onboardGrid four">
-              {timeField("Sunday Shacharis",sundayShacharis,setSundayShacharis)}
-              {timeField("Mon–Fri Shacharis",weekdayShacharis,setWeekdayShacharis)}
-              {timeField("Shabbos Shacharis",shabbosShacharis,setShabbosShacharis)}
-              {timeField("Shabbos Early Mincha",shabbosEarlyMincha,setShabbosEarlyMincha)}
-            </div>
-          </div>
-
-          <div className="onboardSection">
-            <div className="onboardRulesHead">
+        <>
+          <div className="panel onboardingCard setupBasicsCard">
+            <div className="panelHead">
               <div>
-                <h3>Automatic Mincha / Maariv rules</h3>
-                <p className="helperText">These are already filled in. Most shuls should only need to review them.</p>
+                <span className="eyebrow">Step 2 of 2 · normal weekly schedule</span>
+                <h2>Tell us what normally happens each week</h2>
+                <p className="helperText">Add as many minyanim as the shul has. Each minyan can use a fixed time or a zman-based rule.</p>
               </div>
-              <button type="button" className="secondary compactButton" onClick={()=>setShowAdvancedRules(v=>!v)}>
-                {showAdvancedRules?"Hide timing details":"Edit timing rules"}
-              </button>
+              {accountStatus&&<span className="sourceBadge"><CheckCircle2 size={14}/> {accountStatus}</span>}
             </div>
 
-            <div className="ruleSummary">
-              <span><b>Sun–Thu Early</b> Plag − {earlyOffset} min</span>
-              <span><b>Sun–Thu Late</b> Sunset − {lateOffset} min</span>
-              <span><b>Friday Mincha</b> Sunset − {fridayOffset} min</span>
-              <span><b>Shabbos Late</b> Sunset − {shabbosLateOffset} min</span>
-              <span><b>Shabbos / Yom Tov Ends</b> Sunset + {shabbosEndMinutes} min</span>
+            <div className="onboardGrid three">
+              <label className="onboardField">
+                <span>Shul name</span>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="Example Shul" autoFocus/>
+              </label>
+              <label className="onboardField">
+                <span>ZIP code</span>
+                <input value={zip} inputMode="numeric" onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="44118"/>
+                <small>Used for automatic zmanim.</small>
+              </label>
+              <label className="onboardField">
+                <span>Shabbos / Yom Tov ends</span>
+                <div className="minutesSetting">
+                  <input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/>
+                  <b>minutes after sunset</b>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div className="scheduleWizardLayout">
+            <div className="scheduleBuilder">
+              <div className="scheduleInfoBox">
+                <strong>Set times or use zmanim — it's up to you.</strong>
+                <span>You can have multiple minyanim for each tefillah, and different rules for different days.</span>
+              </div>
+
+              {SERVICES.map(service=>(
+                <section className={`serviceRuleSection ${service.toLowerCase()}`} key={service}>
+                  <div className="serviceRuleHead">
+                    <div>
+                      <h3>{service}</h3>
+                      <span>{rules.filter(rule=>rule.service===service).length} minyan{rules.filter(rule=>rule.service===service).length===1?"":"im"} configured</span>
+                    </div>
+                    <button type="button" className="primary compactAddButton" onClick={()=>addRule(service)}>
+                      <Plus size={16}/> Add {service} Minyan
+                    </button>
+                  </div>
+                  <div className="serviceRuleList">
+                    {rules.filter(rule=>rule.service===service).map(renderRule)}
+                  </div>
+                </section>
+              ))}
             </div>
 
-            {showAdvancedRules&&(
-              <div className="onboardRuleGrid advancedRuleGrid">
-                <label><span>Sun–Thu Early Mincha</span><div><b>Plag minus</b><input type="number" min="0" max="120" value={earlyOffset} onChange={e=>setEarlyOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
-                <label><span>Sun–Thu Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={lateOffset} onChange={e=>setLateOffset(Number(e.target.value))}/><b>min</b></div><small>Same time for the whole week · round earlier to 5 min.</small></label>
-                <label><span>Friday Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={fridayOffset} onChange={e=>setFridayOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Friday.</small></label>
-                <label><span>Shabbos Late Mincha</span><div><b>Sunset minus</b><input type="number" min="0" max="120" value={shabbosLateOffset} onChange={e=>setShabbosLateOffset(Number(e.target.value))}/><b>min</b></div><small>Calculated for that Shabbos.</small></label>
-                <label><span>Shabbos/Yom Tov end threshold</span><div><b>Sunset plus</b><input type="number" min="1" max="180" value={shabbosEndMinutes} onChange={e=>setShabbosEndMinutes(Number(e.target.value))}/><b>min</b></div><small>Used for Shabbos Ends and after-nightfall Yom Tov transitions.</small></label>
-              </div>
-            )}
-          </div>
+            <aside className="coveragePanel">
+              <div className="panel coverageCard">
+                <div className="coverageTitle">
+                  <CheckCircle2 size={20}/>
+                  <div>
+                    <h3>Weekly Coverage</h3>
+                    <span>{coverage.count} of 21 day/service combinations are set.</span>
+                  </div>
+                </div>
 
-          {error&&<div className="onboardError">{error}</div>}
-          <div className="onboardActions onboardStickyActions">
-            <span className="onboardReadyHint">If the defaults look right, you're done.</span>
-            <button className="secondary" onClick={()=>setStep(1)}>Back to Account</button>
-            <button className="primary onboardingFinish" disabled={busy} onClick={createShul}>{busy?"Creating shul...":"Create Shul & Open Dashboard"}</button>
+                <div className={coverage.complete?"coverageStatus complete":"coverageStatus"}>
+                  <strong>{coverage.complete?"All days are covered!":"A few schedule gaps remain"}</strong>
+                  <span>{coverage.complete?"You're ready to create the shul.":"Fill every blank before continuing."}</span>
+                </div>
+
+                <div className="coverageTable">
+                  <div className="coverageHeader"><span></span>{SERVICES.map(service=><b key={service}>{service}</b>)}</div>
+                  {coverage.matrix.map(row=>(
+                    <div className="coverageRow" key={row.day}>
+                      <strong>{row.label}</strong>
+                      {SERVICES.map(service=>(
+                        <span className={row.covered[service]?"coverageDot yes":"coverageDot no"} key={service}>
+                          {row.covered[service]?"✓":"—"}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {error&&<div className="onboardError">{error}</div>}
+
+                <button
+                  className="primary createShulButton"
+                  disabled={busy||!coverage.complete}
+                  onClick={createShul}
+                >
+                  {busy?"Creating shul...":"Create Shul & Open Dashboard"}
+                </button>
+                <button className="secondary fullWidthButton" onClick={()=>setStep(1)}>Back to Account</button>
+              </div>
+            </aside>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
