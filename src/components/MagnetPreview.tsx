@@ -61,10 +61,21 @@ export default function MagnetPreview({day, notice, shulName="SHUL", fit=false}:
         <div className="epTopSplit">
           <section className="epZmanim">
             <div className="epSectionTitle">ZMANIM</div>
-            <div className="epUnavailable">
-              <strong>Live zmanim pending</strong>
-              <span>MyZmanim is not connected yet.</span>
-            </div>
+            {day.zmanimRows?.length ? (
+              <div className="epZmanimRows">
+                {day.zmanimRows.map((row,i)=>(
+                  <div className="epZmanimRow" key={`${row.label}-${i}`}>
+                    <b>{row.label}</b>
+                    <strong>{row.time}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="epUnavailable">
+                <strong>Zmanim unavailable</strong>
+                <span>Waiting for MyZmanim data.</span>
+              </div>
+            )}
           </section>
 
           <section className="epShul">
