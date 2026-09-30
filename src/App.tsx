@@ -43,6 +43,7 @@ export type LiveScheduleEntry = {
   group_period: "individual" | "week_earliest" | "month_earliest" | null;
   zman_family: string | null;
   use_shul_zman_default: boolean | null;
+  rule_group_id: string | null;
 };
 
 type SpecialScheduleDay = {
@@ -250,6 +251,7 @@ export default function App() {
   const [loading,setLoading] = useState(true);
   const [loadError,setLoadError] = useState("");
   const [liveZmanimRows,setLiveZmanimRows] = useState<Array<{label:string;time:string}>>([]);
+  const [dataVersion,setDataVersion] = useState(0);
 
   const remainingPushes = Math.max(0, 2 - pushesUsed);
   const activeDevices = devices.filter(d=>d.active);
@@ -415,7 +417,7 @@ export default function App() {
       .subscribe();
 
     return ()=>{cancelled=true; supabase.removeChannel(channel);};
-  },[authReady,currentShulId]);
+  },[authReady,currentShulId,dataVersion]);
 
   return (
     <div className="appShell">
@@ -490,17 +492,15 @@ export default function App() {
 
         {tab === "devices" && <DevicesPage devices={devices} />}
 
-        {tab === "settings" && (
-          <>
-            <div className="pageHeader">
-              <div><span className="eyebrow">Organization</span><h1>Settings</h1><p>Live settings for this shul.</p></div>
-            </div>
-            <div className="settingsGrid">
-              <div className="panel"><h2>Shul Profile</h2><p>{shulName}</p><p className="helperText">ZIP {postalCode || "—"} · Connected to Supabase.</p></div>
-              <div className="panel"><h2>Administrators</h2><p>Pilot access</p><p className="helperText">Proper user accounts are on the pre-launch list.</p></div>
-              <div className="panel"><h2>Integrations</h2><p>MyZmanim connected</p><p className="helperText">MyZmanim supplies zmanim/times. Calendar/date metadata is kept separate.</p></div>
-            </div>
-          </>
+        {tab === "settings" && currentShulId && (
+          <OnboardingPage
+            mode="edit"
+            shulId={currentShulId}
+            onCancel={()=>setTab("dashboard")}
+            onComplete={()=>{
+              setDataVersion(v=>v+1);
+            }}
+          />
         )}
 
         {tab === "super" && <SuperAdminPage onNewOrganization={()=>setTab("onboarding")} />}
