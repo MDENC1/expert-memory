@@ -234,13 +234,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .maybeSingle()
       ]);
 
-      const hebcalFallback=()=>{
-        if(countryCode!=="US")throw new Error("Hebcal ZIP fallback is only configured for US locations");
-        return fetch(`https://www.hebcal.com/zmanim?cfg=json&zip=${encodeURIComponent(postalCode)}&start=${startDate}&end=${endDate}`)
-        .then(r=>{if(!r.ok)throw new Error(`Hebcal fallback failed (${r.status})`);return r.json();})
-        .then(data=>({times:data?.times||{},source:"Hebcal fallback"}));
-      };
-
+      // MyZmanim owns clock times. Hebcal/calendar data is a separate concern
+      // and must never silently substitute different zmanim calculations.
       const zmanimPromise=postalCode
         ? supabase.functions.invoke("myzmanim",{
             body:{postal_code:postalCode,country_code:countryCode,start_date:zmanimStartDate,end_date:zmanimEndDate}
@@ -250,13 +245,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               if(!data?.success)throw new Error(data?.error||"MyZmanim request failed");
               return {times:data.times||{},source:"MyZmanim"};
             })
-            .catch(async myzmanimErr=>{
-              try{
-                return await hebcalFallback();
-              }catch(fallbackErr:any){
-                return {__error:`MyZmanim: ${String(myzmanimErr?.message||myzmanimErr)}; Hebcal: ${String(fallbackErr?.message||fallbackErr)}`};
-              }
-            })
+            .catch(myzmanimErr=>({
+              __error:`MyZmanim: ${String(myzmanimErr?.message||myzmanimErr)}`
+            }))
         : Promise.resolve({__error:"No postal code configured"});
 
       const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes]=await Promise.all([supabasePromise,zmanimPromise]);
