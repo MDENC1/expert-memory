@@ -879,3 +879,67 @@ body{color:#172b26}
   .timingEditor .followsField{grid-column:span 1}
   .coverageHeader,.coverageRow{grid-template-columns:1.1fr repeat(3,.9fr)}
 }
+
+/* Onboarding refinements: aligned basics, explicit rounding/grouping */
+.onboardGrid.fourBasics{
+  grid-template-columns:minmax(220px,1.4fr) minmax(150px,.8fr) minmax(170px,.9fr) minmax(220px,1.1fr);
+  align-items:start;
+}
+.onboardField select{
+  width:100%;
+  border:1px solid #c5d3ce;
+  border-radius:9px;
+  padding:10px 11px;
+  background:#fff;
+  color:#172b26;
+  font-size:14px;
+  font-weight:700;
+  min-height:42px;
+}
+.onboardGrid.fourBasics .onboardField>input,
+.onboardGrid.fourBasics .onboardField>select,
+.onboardGrid.fourBasics .minutesSetting{
+  min-height:42px;
+}
+.onboardGrid.fourBasics .minutesSetting input{height:42px}
+.ruleSelectOptions{
+  display:grid;
+  grid-template-columns:minmax(220px,.8fr) minmax(320px,1.2fr);
+  gap:10px;
+}
+.ruleSelectOptions label{
+  display:grid;
+  gap:5px;
+}
+.ruleSelectOptions label>span{
+  font-size:10px;
+  font-weight:900;
+  color:#52655f;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.ruleSelectOptions select{
+  width:100%;
+  border:1px solid #c5d3ce;
+  border-radius:8px;
+  padding:8px 9px;
+  background:#fff;
+  color:#18312a;
+  font-size:11px;
+  font-weight:800;
+}
+.ruleSelectOptions small{
+  font-size:9px;
+  line-height:1.35;
+  color:#71817b;
+}
+.coverageDot.yes{
+  min-width:24px;
+  display:inline-block;
+}
+@media(max-width:1100px){
+  .onboardGrid.fourBasics{grid-template-columns:1fr 1fr}
+}
+@media(max-width:760px){
+  .onboardGrid.fourBasics,.ruleSelectOptions{grid-template-columns:1fr}
+}
