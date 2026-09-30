@@ -336,7 +336,7 @@ export default function OnboardingPage({onCancel,onComplete}:Props){
     setLocationStatus("idle");
 
     const postal=zip.trim();
-    const minimumLength=country==="US"?5:country==="GB"?5:country==="IL"?7:3;
+    const minimumLength=country==="US"?5:country==="GB"?5:country==="IL"?5:3;
     if(postal.length<minimumLength)return;
 
     let cancelled=false;
