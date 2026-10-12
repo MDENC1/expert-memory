@@ -888,6 +888,7 @@ export default function App() {
               setTab("monthly");
             }}
             onAddNotice={() => setTab("notices")}
+            shulId={currentShulId}
             shulName={shulName}
             activeMagnets={activeDevices.length}
             healthyMagnets={healthyDevices.length}
