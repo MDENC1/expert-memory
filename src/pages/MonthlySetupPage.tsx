@@ -1300,11 +1300,11 @@ export default function MonthlySetupPage({
           <div>
             <span className="eyebrow">Jewish month</span>
             <h2>Choose the Month You’re Working On</h2>
-            <p className="helperText">Everything below updates to show only the fast days and special schedule items for the selected Jewish month.</p>
+            <p className="helperText">Special dates are shown below in Hebrew-date order. Regular shul times are preloaded so you only change what is different.</p>
           </div>
           <label className="monthlyMonthSelect">
             <span>Month</span>
-            <select value={month} onChange={e=>setMonth(e.target.value)}>
+            <select value={month} onChange={e=>{setMonth(e.target.value);setStatus("");}}>
               {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
             </select>
           </label>
@@ -1312,85 +1312,169 @@ export default function MonthlySetupPage({
 
         <div className="monthlyMonthCurrent">
           <span>Working on</span>
-          <strong>{month}</strong>
+          <strong>{month}{monthOccurrence?.year?` ${monthOccurrence.year}`:""}</strong>
+          {monthOccurrence&&<small>{monthlyEnglishDate(monthOccurrence.start)} – {monthlyEnglishDate(monthOccurrence.end)}</small>}
         </div>
 
-        {monthFastDays.length>0&&(
-          <section className="monthlySection">
-            <div className="monthlySectionHead">
-              <div>
-                <span className="eyebrow">Fast days</span>
-                <h3>{month} Fast-Day Schedule</h3>
-                <p className="helperText">Automatic fast times come from the configured MyZmanim rules. Override an individual fast only when needed.</p>
-              </div>
-            </div>
-
-            <div className="fastDayList">
-              {monthFastDays.map(fast=>{
-                const override=fastOverrides[fast.key] ?? {};
-                const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
-                return (
-                  <div className="fastDayRow" key={fast.key}>
-                    <div className="fastName">
-                      <strong>{fast.name}</strong>
-                      <small>{fast.startSource} · ZIP {postalCode}</small>
-                    </div>
-
-                    <label>
-                      <span>Fast begins</span>
-                      <div className="generatedTime">
-                        {override.start ? displayTime(override.start) : fast.autoStart}
-                        <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
-                      </div>
-                      <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
-                    </label>
-
-                    <label>
-                      <span>Fast ends</span>
-                      <div className="generatedTime">
-                        {override.end ? displayTime(override.end) : automaticEnd}
-                        <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
-                      </div>
-                      <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
-                    </label>
-
-                    <button className="secondary" onClick={()=>setFastOverrides(v=>{const next={...v};delete next[fast.key];return next;})}>Use Automatic</button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+        {monthlyError&&(
+          <div className="monthlySetupError">
+            <strong>Couldn’t load Monthly Setup:</strong> {monthlyError}
+          </div>
         )}
 
-        <section className="monthlySection">
-          <div className="monthlySectionHead">
-            <div>
-              <span className="eyebrow">Special schedule</span>
-              <h3>{month} Special Times</h3>
-              <p className="helperText">Enter only the shul-specific times that differ from the regular schedule. Automatic zmanim remain controlled in Settings.</p>
-            </div>
+        {monthlyLoading ? (
+          <div className="monthlySetupLoading">
+            <strong>Loading {month} dates and regular shul times…</strong>
+            <span>Using the shul’s current schedule and Automatic Zmanim settings.</span>
           </div>
-
-          {template.specialItems.length ? (
-            <div className="specialSetupGrid">
-              {template.specialItems.map(item=>(
-                <label key={item.key} className="specialSetupField">
-                  <span>{item.label}</span>
-                  <small>{item.appliesTo}</small>
-                  <input type="time" value={values[item.key] || ""} onChange={e=>setValues(v=>({...v,[item.key]:e.target.value}))} />
-                  {item.helpText && <small>{item.helpText}</small>}
-                </label>
-              ))}
-            </div>
-          ) : (
-            <div className="emptyMonthSetup">No standard shul-entered special times are needed for {month}.</div>
-          )}
-
-          <div className="monthlySetupActions">
-            <span>{status}</span>
-            <button className="primary" onClick={saveMonth}>Save & Auto-Populate {month}</button>
+        ) : monthlyCards.length===0 ? (
+          <div className="emptyMonthSetup">
+            No standard special-date setup is needed for {month}.
           </div>
-        </section>
+        ) : (
+          <div className="monthlyDateList">
+            {monthlyCards.map(card=>{
+              const isFast=monthlyIsFast(card.title);
+              const fastAuto=isFast
+                ?monthlyFastAutomaticTimes(card.date,card.title,monthlyZmanim,zmanDefaults,shabbosEndMinutes)
+                :null;
+              const fastOverride=fastOverrides[card.date]||{};
+
+              return (
+                <section className="monthlyDateCard" key={card.date}>
+                  <div className="monthlyDateHead">
+                    <div className="monthlyHebrewDate">
+                      <strong>{card.hebrewDay}</strong>
+                      <span>{month}</span>
+                    </div>
+                    <div>
+                      <span className="eyebrow">{monthlyEnglishDate(card.date)}</span>
+                      <h3>{card.title}</h3>
+                      <p className="helperText">
+                        {card.replaceSchedule
+                          ?"Blank special-schedule fields keep the regular shul time shown beside them."
+                          :"This adds a special time without changing the regular Shacharis, Mincha or Maariv schedule."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {card.replaceSchedule&&(
+                    <div className="monthlyServiceGrid">
+                      <div className="monthlyServiceGridHead">
+                        <span>Service</span>
+                        <span>Regular schedule</span>
+                        <span>Special schedule</span>
+                      </div>
+                      {MONTHLY_SERVICES.map(service=>{
+                        const value=monthlyScheduleOverrides[card.date]?.[service]||"";
+                        return (
+                          <div className="monthlyServiceRow" key={service}>
+                            <strong>{service}</strong>
+                            <div className="monthlyRegularValue">
+                              <strong>{regularServiceDisplay(card.date,service)}</strong>
+                              <small>What would normally run on this date</small>
+                            </div>
+                            <label>
+                              <input
+                                type="time"
+                                value={value}
+                                onChange={e=>setMonthlyScheduleOverride(card.date,service,e.target.value)}
+                                aria-label={`${card.title} ${service} special time`}
+                              />
+                              <small>{value?"Using special time":"Blank = keep regular"}</small>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {isFast&&fastAuto&&(
+                    <div className="monthlyAdditionalBlock monthlyFastBlock">
+                      <div className="monthlyAdditionalHead">
+                        <strong>Fast times</strong>
+                        <span>Automatic Zmanim are shown first. Enter an override only if this fast should use a different time.</span>
+                      </div>
+                      <div className="monthlyAdditionalGrid">
+                        <label className="monthlyAdditionalField">
+                          <span>Fast begins</span>
+                          <div className="monthlyGeneratedValue">
+                            <strong>{fastOverride.start?displayTime(fastOverride.start):fastAuto.beginDisplay}</strong>
+                            <small>{fastOverride.start?"Manual override":"Automatic Zmanim"}</small>
+                          </div>
+                          <input
+                            type="time"
+                            value={fastOverride.start||""}
+                            onChange={e=>setFastOverride(card.date,"start",e.target.value)}
+                            aria-label={`${card.title} fast begins override`}
+                          />
+                        </label>
+                        <label className="monthlyAdditionalField">
+                          <span>Fast ends</span>
+                          <div className="monthlyGeneratedValue">
+                            <strong>{fastOverride.end?displayTime(fastOverride.end):fastAuto.endDisplay}</strong>
+                            <small>{fastOverride.end?"Manual override":"Automatic Zmanim"}</small>
+                          </div>
+                          <input
+                            type="time"
+                            value={fastOverride.end||""}
+                            onChange={e=>setFastOverride(card.date,"end",e.target.value)}
+                            aria-label={`${card.title} fast ends override`}
+                          />
+                        </label>
+                      </div>
+                      {(fastOverride.start||fastOverride.end)&&(
+                        <button
+                          className="secondary monthlyUseAutomatic"
+                          onClick={()=>setFastOverrides(current=>{
+                            const next={...current};
+                            delete next[card.date];
+                            return next;
+                          })}
+                        >
+                          Use Automatic Fast Times
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {card.additional.length>0&&(
+                    <div className="monthlyAdditionalBlock">
+                      <div className="monthlyAdditionalHead">
+                        <strong>Additional times</strong>
+                        <span>These are separate from the regular davening schedule.</span>
+                      </div>
+                      <div className="monthlyAdditionalGrid">
+                        {card.additional.map(field=>(
+                          <label className="monthlyAdditionalField" key={field.key}>
+                            <span>{field.label}</span>
+                            <input
+                              type="time"
+                              value={additionalValue(card.date,field.key)}
+                              onChange={e=>setAdditionalValue(card.date,field.key,e.target.value)}
+                            />
+                            {field.helpText&&<small>{field.helpText}</small>}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="monthlySetupActions monthlySetupSaveBar">
+          <span>{status||"Review the month, change only what is different, then save once."}</span>
+          <button
+            className="primary"
+            disabled={monthlySaving||monthlyLoading}
+            onClick={()=>void saveMonth()}
+          >
+            {monthlySaving?"Saving…":`Save ${month} Setup`}
+          </button>
+        </div>
       </div>
     </>
   );
