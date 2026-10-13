@@ -327,7 +327,7 @@ function mapNotice(row:any):Notice {
     details: row.details || "",
     startAt: row.display_start,
     endAt: row.display_end,
-    eventTime: row.event_time || undefined,
+    eventTime: row.event_time ? prettyTime(row.event_time) : undefined,
     recurrence: row.recurring ? {
       enabled:true,
       frequency:row.recurrence_type || undefined,
