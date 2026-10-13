@@ -1550,3 +1550,7 @@ body{color:#172b26}
   .calendarContentModal .calendarModalActions{align-items:stretch;flex-direction:column}
   .calendarContentModal .calendarModalActions button{width:100%}
 }
+
+
+.recurrenceRange{font-weight:700;color:#476159}
+.recurringDot{display:inline-block;margin-right:4px;font-weight:950;color:#31566b}
