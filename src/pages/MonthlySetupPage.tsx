@@ -1169,13 +1169,16 @@ export default function MonthlySetupPage({
 
   const customEventsForDate=(date:string)=>monthlyCustomEvents[date]||[];
 
-  const chanukahLightings=chanukahDates.flatMap(choice=>
+  const chanukahEventsByLabel=(label:string)=>chanukahDates.flatMap(choice=>
     customEventsForDate(choice.date)
-      .filter(event=>event.label.trim().toLowerCase()==="menorah lighting")
+      .filter(event=>event.label.trim().toLowerCase()===label.toLowerCase())
       .map(event=>({...event,date:choice.date}))
   );
 
-  const addChanukahLighting=()=>{
+  const chanukahLightings=chanukahEventsByLabel("Menorah Lighting");
+  const chanukahParties=chanukahEventsByLabel("Chanukah Party");
+
+  const addChanukahEvent=(label:string,prefix:string)=>{
     const date=chanukahDates[0]?.date;
     if(!date)return;
     setMonthlyCustomEvents(current=>({
@@ -1183,15 +1186,15 @@ export default function MonthlySetupPage({
       [date]:[
         ...(current[date]||[]),
         {
-          id:`menorah-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-          label:"Menorah Lighting",
+          id:`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          label,
           time:""
         }
       ]
     }));
   };
 
-  const updateChanukahLightingDate=(currentDate:string,id:string,nextDate:string)=>{
+  const updateChanukahEventDate=(currentDate:string,id:string,nextDate:string)=>{
     if(currentDate===nextDate)return;
     setMonthlyCustomEvents(current=>{
       const event=(current[currentDate]||[]).find(item=>item.id===id);
@@ -1469,23 +1472,26 @@ export default function MonthlySetupPage({
       }
 
       if(month==="Kislev"&&chanukahDates.length===8){
-        const lightingRows=chanukahLightings
+        const chanukahEventRows=[
+          ...chanukahLightings.map(item=>({...item,title:"Menorah Lighting"})),
+          ...chanukahParties.map(item=>({...item,title:"Chanukah Party"}))
+        ]
           .filter(item=>item.time)
           .map((item,index)=>({
             event_date:item.date,
-            title:"Menorah Lighting",
+            title:item.title,
             event_time:item.time,
             approximate:false,
             sort_order:100+index*10
           }));
 
-        const {error:lightingSaveError}=await supabase.rpc("save_monthly_custom_events",{
+        const {error:chanukahEventsSaveError}=await supabase.rpc("save_monthly_custom_events",{
           p_shul_id:shulId,
           p_start_date:chanukahDates[0].date,
           p_end_date:chanukahDates[chanukahDates.length-1].date,
-          p_rows:lightingRows
+          p_rows:chanukahEventRows
         });
-        if(lightingSaveError)throw lightingSaveError;
+        if(chanukahEventsSaveError)throw chanukahEventsSaveError;
       }
 
       setStatus(`${month} saved. Special schedules were applied to the correct Hebrew dates.`);
@@ -1622,59 +1628,116 @@ export default function MonthlySetupPage({
         )}
 
         {!monthlyLoading&&month==="Kislev"&&chanukahDates.length===8&&(
-          <div className="monthlyMonthSpecialEvent">
-            <div className="monthlyAdditionalHead">
-              <div>
-                <span className="eyebrow">Special event</span>
-                <strong>Menorah Lighting</strong>
+          <div className="monthlyKislevSpecialEvents">
+            <div className="monthlyMonthSpecialEvent">
+              <div className="monthlyAdditionalHead">
+                <div>
+                  <span className="eyebrow">Special event</span>
+                  <strong>Menorah Lighting</strong>
+                </div>
+                <span>Choose any of the eight Chanukah dates when the shul will hold a lighting. Add as many dates or times as needed.</span>
               </div>
-              <span>Choose any of the eight Chanukah dates when the shul will hold a lighting. Add as many dates or times as needed.</span>
+
+              {chanukahLightings.length>0&&(
+                <div className="monthlyChanukahLightingList">
+                  {chanukahLightings.map(lighting=>(
+                    <div className="monthlyChanukahLightingRow" key={lighting.id}>
+                      <label>
+                        <span>Date</span>
+                        <select
+                          value={lighting.date}
+                          onChange={e=>updateChanukahEventDate(lighting.date,lighting.id,e.target.value)}
+                        >
+                          {chanukahDates.map(choice=>(
+                            <option key={choice.date} value={choice.date}>
+                              {`${choice.hebrewLabel} - ${choice.englishLabel}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Time</span>
+                        <input
+                          type="time"
+                          value={lighting.time}
+                          onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"time",e.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="secondary monthlyRemoveTime"
+                        onClick={()=>removeMonthlyCustomEvent(lighting.date,lighting.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="secondary monthlyAddTime monthlyAddSpecialEvent"
+                onClick={()=>addChanukahEvent("Menorah Lighting","menorah")}
+              >
+                + Add Menorah Lighting
+              </button>
             </div>
 
-            {chanukahLightings.length>0&&(
-              <div className="monthlyChanukahLightingList">
-                {chanukahLightings.map(lighting=>(
-                  <div className="monthlyChanukahLightingRow" key={lighting.id}>
-                    <label>
-                      <span>Date</span>
-                      <select
-                        value={lighting.date}
-                        onChange={e=>updateChanukahLightingDate(lighting.date,lighting.id,e.target.value)}
-                      >
-                        {chanukahDates.map(choice=>(
-                          <option key={choice.date} value={choice.date}>
-                            {`${choice.hebrewLabel} - ${choice.englishLabel}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Time</span>
-                      <input
-                        type="time"
-                        value={lighting.time}
-                        onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"time",e.target.value)}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="secondary monthlyRemoveTime"
-                      onClick={()=>removeMonthlyCustomEvent(lighting.date,lighting.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
+            <div className="monthlyMonthSpecialEvent">
+              <div className="monthlyAdditionalHead">
+                <div>
+                  <span className="eyebrow">Special event</span>
+                  <strong>Chanukah Party</strong>
+                </div>
+                <span>Choose any of the eight Chanukah dates when the shul will hold a party. Add multiple parties or times if needed.</span>
               </div>
-            )}
 
-            <button
-              type="button"
-              className="secondary monthlyAddTime monthlyAddSpecialEvent"
-              onClick={addChanukahLighting}
-            >
-              + Add Menorah Lighting
-            </button>
+              {chanukahParties.length>0&&(
+                <div className="monthlyChanukahLightingList">
+                  {chanukahParties.map(party=>(
+                    <div className="monthlyChanukahLightingRow" key={party.id}>
+                      <label>
+                        <span>Date</span>
+                        <select
+                          value={party.date}
+                          onChange={e=>updateChanukahEventDate(party.date,party.id,e.target.value)}
+                        >
+                          {chanukahDates.map(choice=>(
+                            <option key={choice.date} value={choice.date}>
+                              {`${choice.hebrewLabel} - ${choice.englishLabel}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Time</span>
+                        <input
+                          type="time"
+                          value={party.time}
+                          onChange={e=>updateMonthlyCustomEvent(party.date,party.id,"time",e.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="secondary monthlyRemoveTime"
+                        onClick={()=>removeMonthlyCustomEvent(party.date,party.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="secondary monthlyAddTime monthlyAddSpecialEvent"
+                onClick={()=>addChanukahEvent("Chanukah Party","chanukah-party")}
+              >
+                + Add Chanukah Party
+              </button>
+            </div>
           </div>
         )}
 
