@@ -6,22 +6,6 @@ import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
 import { magnetPngBase64 } from "../lib/renderMagnet";
 
-const dayNames=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Shabbos"];
-function prettyTime(t:string|null){
-  if(!t) return "";
-  const [h,m]=t.split(":").map(Number);
-  const d=new Date(2000,0,1,h,m);
-  return new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"}).format(d);
-}
-function ruleText(r:LiveScheduleEntry){
-  if(r.service_time) return prettyTime(r.service_time);
-  if(r.timing_source==="none") return "NO MINYAN";
-  if(r.timing_source==="follows") return r.follows_text || "Follows Mincha";
-  const base=(r.timing_source||"rule").replaceAll("_"," ");
-  const off=r.timing_offset_minutes||0;
-  return `${base}${off ? ` ${off>0?"+":""}${off} min` : ""}`;
-}
-
 function shortDate(value:string){
   return new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric"})
     .format(new Date(`${value}T12:00:00`));
@@ -65,7 +49,7 @@ export default function Dashboard({
         body:{shul_id:shulId,image_base64:imageBase64}
       });
       if(error)throw error;
-      setPublishStatus("Published. Refresh shul_test on the Badger.");
+      setPublishStatus("Screen published successfully.");
     }catch(error:any){
       setPublishStatus("Publish failed: "+(error?.message||String(error)));
     }finally{
@@ -77,15 +61,16 @@ export default function Dashboard({
     <>
       <div className="pageHeader">
         <div>
-          <span className="eyebrow">{dateLabel} · LIVE SUPABASE</span>
+          <span className="eyebrow">{dateLabel}</span>
           <h1>{loading ? "Loading…" : shulName}</h1>
-          <p>This page is now reading the pilot shul directly from Supabase.</p>
+          <p>See what households are seeing today and handle anything that needs attention.</p>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
-          <button className="secondary" onClick={publishToBadger} disabled={publishing||loading}>
-            {publishing?"Publishing…":"Push to Badger"}
+          <button className="secondary" onClick={onGoCalendar}>Open Calendar</button>
+          <button className="secondary" onClick={onAddNotice}>+ Add Notice</button>
+          <button className="primary" onClick={publishToBadger} disabled={publishing||loading}>
+            {publishing?"Publishing…":"Publish Screen"}
           </button>
-          <button className="primary" onClick={onAddNotice}>+ Add Notice</button>
           {publishStatus&&<small style={{width:"100%",textAlign:"right"}}>{publishStatus}</small>}
         </div>
       </div>
@@ -140,29 +125,38 @@ export default function Dashboard({
       )}
 
       <div className="statsGrid">
-        <div className="stat"><span>Active magnets</span><strong>{loading ? "—" : activeMagnets}</strong><small>{healthyMagnets} healthy</small></div>
-        <div className="stat"><span>Next regular update</span><strong>12:15 AM</strong><small>current pilot rule</small></div>
-        <div className="stat"><span>Immediate updates</span><strong>{remainingPushes} / 2</strong><small>remaining today</small></div>
-        <div className="stat"><span>Active notices</span><strong>{notices.length}</strong><small>from Supabase</small></div>
+        <div className="stat"><span>Active magnets</span><strong>{loading ? "—" : activeMagnets}</strong><small>{healthyMagnets} reporting healthy</small></div>
+        <div className="stat"><span>Next automatic refresh</span><strong>12:15 AM</strong><small>scheduled overnight</small></div>
+        <div className="stat"><span>Urgent updates</span><strong>{remainingPushes} / 2</strong><small>available today</small></div>
+        <div className="stat"><span>Active notices</span><strong>{notices.filter(n=>n.status==="live").length}</strong><small>currently on screen</small></div>
       </div>
 
       <div className="twoCol">
+        <MagnetPreview day={previewDay} notice={liveNotice} shulName={shulName} />
         <div className="panel">
           <div className="panelHead">
-            <div><span className="eyebrow">Supabase</span><h2>Weekly shul rules</h2></div>
-            <button className="secondary" onClick={onGoCalendar}>Open Calendar</button>
+            <div><span className="eyebrow">Today</span><h2>Today’s Schedule</h2></div>
+            <button className="secondary" onClick={onGoCalendar}>Edit Calendar</button>
           </div>
           <div className="miniSchedule">
-            {scheduleEntries.slice(0,8).map(r=>(
-              <div key={r.id}>
-                <b>{dayNames[r.day_of_week] || `Day ${r.day_of_week}`} · {r.display_name || r.service_type}</b>
-                <span>{ruleText(r)}{r.follows_text ? ` · ${r.follows_text}` : ""}</span>
+            {(previewDay.shulScheduleRows || []).map((row,i)=>(
+              <div key={`${row.label}-${i}`}>
+                <b>{row.label}</b>
+                <span>{row.time || "No time set"}{row.note ? ` · ${row.note}` : ""}</span>
               </div>
             ))}
-            {!loading && scheduleEntries.length===0 && <div><b>No weekly rules found</b><span>Nothing is currently stored in schedule_entries.</span></div>}
+            {!loading && !(previewDay.shulScheduleRows || []).length && (
+              <div><b>No schedule set for today</b><span>Open Calendar to add or adjust today’s schedule.</span></div>
+            )}
           </div>
+          {liveNotice && (
+            <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #edf2f0"}}>
+              <span className="eyebrow">On screen now</span>
+              <h3 style={{margin:"4px 0 4px"}}>{liveNotice.headline}</h3>
+              {liveNotice.details && <p style={{margin:0}}>{liveNotice.details}</p>}
+            </div>
+          )}
         </div>
-        <MagnetPreview day={previewDay} notice={liveNotice} shulName={shulName} />
       </div>
     </>
   );
