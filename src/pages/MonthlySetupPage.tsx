@@ -1469,66 +1469,35 @@ export default function MonthlySetupPage({
       }
 
       if(month==="Kislev"&&chanukahDates.length===8){
-        const validDates=chanukahDates.map(item=>item.date);
-        const {error:deleteLightingError}=await supabase
-          .from("special_schedule_entries")
-          .delete()
-          .eq("shul_id",shulId)
-          .eq("title","Menorah Lighting")
-          .in("event_date",validDates);
-        if(deleteLightingError)throw deleteLightingError;
-
         const lightingRows=chanukahLightings
           .filter(item=>item.time)
           .map((item,index)=>({
-            shul_id:shulId,
             event_date:item.date,
             title:"Menorah Lighting",
             event_time:item.time,
             approximate:false,
-            note:"monthly_custom_event",
-            sort_order:100+index*10,
-            active:true
+            sort_order:100+index*10
           }));
 
-        if(lightingRows.length){
-          const {error:lightingInsertError}=await supabase
-            .from("special_schedule_entries")
-            .insert(lightingRows);
-          if(lightingInsertError)throw lightingInsertError;
-
-          const configuredDates=[...new Set(lightingRows.map(item=>item.event_date))];
-          const {data:existingDays,error:existingDaysError}=await supabase
-            .from("special_schedule_days")
-            .select("event_date")
-            .eq("shul_id",shulId)
-            .in("event_date",configuredDates);
-          if(existingDaysError)throw existingDaysError;
-
-          const existingSet=new Set((existingDays||[]).map((row:any)=>String(row.event_date)));
-          const missingDays=configuredDates
-            .filter(date=>!existingSet.has(date))
-            .map(date=>({
-              shul_id:shulId,
-              event_date:date,
-              title:"Chanukah",
-              replace_normal_schedule:false,
-              confirmed_at:new Date().toISOString()
-            }));
-
-          if(missingDays.length){
-            const {error:dayInsertError}=await supabase
-              .from("special_schedule_days")
-              .insert(missingDays);
-            if(dayInsertError)throw dayInsertError;
-          }
-        }
+        const {error:lightingSaveError}=await supabase.rpc("save_monthly_custom_events",{
+          p_shul_id:shulId,
+          p_start_date:chanukahDates[0].date,
+          p_end_date:chanukahDates[chanukahDates.length-1].date,
+          p_rows:lightingRows
+        });
+        if(lightingSaveError)throw lightingSaveError;
       }
 
       setStatus(`${month} saved. Special schedules were applied to the correct Hebrew dates.`);
       onSpecialSchedulesChanged?.();
     }catch(error){
-      setMonthlyError(error instanceof Error?error.message:"Could not save monthly setup.");
+      const message=
+        error instanceof Error
+          ?error.message
+          :typeof error==="object"&&error&&"message" in error
+            ?String((error as {message?:unknown}).message||"")
+            :String(error||"");
+      setMonthlyError(message||"Could not save monthly setup.");
     }finally{
       setMonthlySaving(false);
     }
