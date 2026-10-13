@@ -4,7 +4,7 @@ import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import { jewishMonthTemplates } from "../data/mock";
 import { supabase } from "../lib/supabase";
 
-type SpecialValues = Record<string,string>;
+type SpecialValues = Record<string,string[]>;
 type FastOverride = {start?:string;end?:string};
 type FocusedScheduleRow = {
   label:string;
@@ -32,7 +32,7 @@ type FocusedZmanDefaults = {
 };
 
 type MonthlyService = "Shacharis" | "Mincha" | "Maariv";
-type MonthlyAdditionalField = {key:string;label:string;helpText?:string};
+type MonthlyAdditionalField = {key:string;label:string;helpText?:string;allowMultiple?:boolean};
 type MonthlyDateCard = {
   date:string;
   hebrewDay:number;
@@ -136,10 +136,40 @@ function monthlyEnglishDate(date:string){
   }).format(new Date(`${date}T12:00:00`));
 }
 
+function monthlyHebrewDayText(value:number){
+  const ones=["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
+  const tens=["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
+  if(value===15)return "ט״ו";
+  if(value===16)return "ט״ז";
+  if(value<10)return `${ones[value]||value}׳`;
+  const ten=Math.floor(value/10);
+  const one=value%10;
+  const raw=`${tens[ten]||""}${ones[one]||""}`;
+  return raw.length<=1?`${raw}׳`:`${raw.slice(0,-1)}״${raw.slice(-1)}`;
+}
+
+function monthlyHebrewMonthText(value:string){
+  const map:Record<string,string>={
+    Tishrei:"תשרי",
+    Cheshvan:"חשון",
+    Kislev:"כסלו",
+    Teves:"טבת",
+    Shevat:"שבט",
+    Adar:"אדר",
+    Nissan:"ניסן",
+    Iyar:"אייר",
+    Sivan:"סיון",
+    Tammuz:"תמוז",
+    Av:"אב",
+    Elul:"אלול"
+  };
+  return map[value]||value;
+}
+
 function monthlyAdditionalFields(title:string):MonthlyAdditionalField[]{
   const t=title.toLowerCase();
   const fields:MonthlyAdditionalField[]=[];
-  if(t.includes("rosh hashana"))fields.push({key:"shofar",label:"Shofar"});
+  if(t.includes("rosh hashana"))fields.push({key:"shofar",label:"Shofar",allowMultiple:true});
   if(t.includes("yom kippur")){
     fields.push(
       {key:"kol_nidrei",label:"Kol Nidrei"},
@@ -390,11 +420,33 @@ function monthlyRegularServiceRows(
   shabbosEndMinutes:number
 ){
   const dow=new Date(`${date}T12:00:00`).getDay();
-  const rules=schedule.filter(rule=>
+  const directRules=schedule.filter(rule=>
     rule.day_of_week===dow&&rule.service_type.toLowerCase()===service.toLowerCase()
   );
 
+  const rules=directRules.length
+    ? directRules
+    : service==="Maariv"
+      ? schedule.filter(rule=>
+          rule.day_of_week===dow&&
+          rule.service_type.toLowerCase()==="mincha"&&
+          Boolean(rule.follows_text)
+        )
+      : [];
+
   return rules.map(rule=>{
+    const isInheritedMaariv=service==="Maariv"&&rule.service_type.toLowerCase()==="mincha";
+
+    if(isInheritedMaariv){
+      const raw=focusedResolveRuleTime(date,rule,schedule,zmanim,defaults,shabbosEndMinutes);
+      const baseLabel=(rule.display_name||"Mincha").replace(/\s*\/\s*Maariv$/i,"");
+      return {
+        label:`Maariv after ${baseLabel}`,
+        time:raw?`Follows ${focusedPretty24(raw)}`:(rule.follows_text||"Follows Mincha"),
+        rawTime:""
+      };
+    }
+
     if(rule.timing_source==="none"){
       return {label:rule.display_name||service,time:"NO MINYAN",rawTime:""};
     }
