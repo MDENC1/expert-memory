@@ -355,6 +355,8 @@ function mapNotice(row:any):Notice {
     type: row.content_type,
     headline: row.title,
     details: row.details || "",
+    location: row.location || undefined,
+    linkedSpecialEventKey: row.linked_special_event_key || undefined,
     startAt: row.display_start,
     endAt: row.display_end,
     eventTime: row.event_time ? prettyTime(row.event_time) : undefined,
