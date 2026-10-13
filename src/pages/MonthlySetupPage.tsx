@@ -1416,12 +1416,21 @@ export default function MonthlySetupPage({
           </div>
         ) : (
           <div className="monthlyDateList">
+            <div className="monthlyCollapseBar">
+              <span>{monthlyCards.length} special date{monthlyCards.length===1?"":"s"} in {month}</span>
+              <div>
+                <button type="button" className="secondary" onClick={collapseAllDates}>Collapse All</button>
+                <button type="button" className="secondary" onClick={expandAllDates}>Expand All</button>
+              </div>
+            </div>
+
             {monthlyCards.map(card=>{
               const isFast=monthlyIsFast(card.title);
               const fastAuto=isFast
                 ?monthlyFastAutomaticTimes(card.date,card.title,monthlyZmanim,zmanDefaults,shabbosEndMinutes)
                 :null;
               const fastOverride=fastOverrides[card.date]||{};
+              const isCollapsed=Boolean(collapsedDates[card.date]);
 
               return (
                 <section className="monthlyDateCard" key={card.date}>
@@ -1430,17 +1439,29 @@ export default function MonthlySetupPage({
                       <strong>{monthlyHebrewDayText(card.hebrewDay)}</strong>
                       <span>{monthlyHebrewMonthText(month)}</span>
                     </div>
-                    <div>
+                    <div className="monthlyDateTitle">
                       <span className="eyebrow">{monthlyEnglishDate(card.date)}</span>
                       <h3>{card.title}</h3>
-                      <p className="helperText">
-                        {card.replaceSchedule
-                          ?"Blank special-schedule fields keep the regular shul time shown beside them."
-                          :"This adds a special time without changing the regular Shacharis, Mincha or Maariv schedule."}
-                      </p>
+                      {!isCollapsed&&(
+                        <p className="helperText">
+                          {card.replaceSchedule
+                            ?"Blank special-schedule fields keep the regular shul time shown beside them."
+                            :"This adds a special time without changing the regular Shacharis, Mincha or Maariv schedule."}
+                        </p>
+                      )}
                     </div>
+                    <button
+                      type="button"
+                      className="secondary monthlyCollapseToggle"
+                      onClick={()=>toggleDateCollapsed(card.date)}
+                      aria-expanded={!isCollapsed}
+                    >
+                      {isCollapsed?"Expand":"Collapse"}
+                    </button>
                   </div>
 
+                  {!isCollapsed&&(
+                    <div className="monthlyDateBody">
                   {card.replaceSchedule&&(
                     <div className="monthlyServiceGrid">
                       <div className="monthlyServiceGridHead">
@@ -1642,6 +1663,8 @@ export default function MonthlySetupPage({
                           );
                         })}
                       </div>
+                    </div>
+                  )}
                     </div>
                   )}
                 </section>
