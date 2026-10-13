@@ -303,10 +303,10 @@ function rulesFromScheduleRows(rows:any[]):MinyanRule[]{
       useShulDefault:Boolean(first.use_shul_zman_default),
       _sortOrder:Number(first.sort_order||0)
     } as MinyanRule & {_sortOrder:number};
-  }).sort((a:any,b:any)=>{
+  }).sort((a:MinyanRule & {_sortOrder:number},b:MinyanRule & {_sortOrder:number})=>{
     const serviceDiff=serviceOrder[a.service]-serviceOrder[b.service];
     return serviceDiff || a._sortOrder-b._sortOrder;
-  }).map((rule:any)=>{
+  }).map((rule:MinyanRule & {_sortOrder:number})=>{
     const {_sortOrder,...clean}=rule;
     return clean as MinyanRule;
   });
