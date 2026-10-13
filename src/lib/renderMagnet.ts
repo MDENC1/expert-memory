@@ -3,6 +3,45 @@ import type { CalendarDay, Notice } from "../types";
 export const MAGNET_WIDTH = 648;
 export const MAGNET_HEIGHT = 480;
 
+const DAF_TRACTATE_HEBREW:Record<string,string>={
+  "Berakhot":"ברכות","Shabbat":"שבת","Eruvin":"עירובין","Pesachim":"פסחים","Shekalim":"שקלים",
+  "Yoma":"יומא","Sukkah":"סוכה","Beitzah":"ביצה","Rosh Hashana":"ראש השנה","Taanit":"תענית",
+  "Megillah":"מגילה","Moed Katan":"מועד קטן","Chagigah":"חגיגה","Yevamot":"יבמות","Ketubot":"כתובות",
+  "Nedarim":"נדרים","Nazir":"נזיר","Sotah":"סוטה","Gittin":"גיטין","Kiddushin":"קידושין",
+  "Bava Kamma":"בבא קמא","Bava Metzia":"בבא מציעא","Bava Batra":"בבא בתרא","Sanhedrin":"סנהדרין",
+  "Makkot":"מכות","Shevuot":"שבועות","Avodah Zarah":"עבודה זרה","Horayot":"הוריות","Zevachim":"זבחים",
+  "Menachot":"מנחות","Chullin":"חולין","Bechorot":"בכורות","Arakhin":"ערכין","Temurah":"תמורה",
+  "Keritot":"כריתות","Meilah":"מעילה","Kinnim":"קינים","Tamid":"תמיד","Middot":"מידות","Niddah":"נדה"
+};
+
+function hebrewNumber(value:number){
+  if(!Number.isFinite(value)||value<=0)return String(value);
+  const ones=["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
+  const tens=["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
+  const hundreds=["","ק","ר","ש","ת"];
+  let n=value;
+  let out="";
+  while(n>=400){out+="ת";n-=400;}
+  if(n>=100){const h=Math.floor(n/100);out+=hundreds[h]||"";n%=100;}
+  if(n===15){out+="טו";n=0;}
+  else if(n===16){out+="טז";n=0;}
+  else{
+    if(n>=10){out+=tens[Math.floor(n/10)]||"";n%=10;}
+    if(n>0)out+=ones[n]||"";
+  }
+  if(out.length===1)return out+"׳";
+  return out.slice(0,-1)+"״"+out.slice(-1);
+}
+
+function dafYomiHebrew(value:string){
+  const match=value.trim().match(/^(.*)\s+(\d+)$/);
+  if(!match)return "";
+  const tractate=DAF_TRACTATE_HEBREW[match[1]];
+  if(!tractate)return "";
+  return `${tractate} ${hebrewNumber(Number(match[2]))}`;
+}
+
+
 type RenderOptions = {
   day: CalendarDay;
   notice?: Notice;
@@ -203,7 +242,21 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
   ctx.fillText(day.isRoshChodesh ? "Rosh Chodesh" : "Schedule", 18, footerTop + 9);
   ctx.textAlign = "right";
   if(day.dafYomi){
-    ctx.fillText(`Daf Yomi: ${day.dafYomi}`, 630, footerTop + 9);
+    const englishDaf=`Daf Yomi: ${day.dafYomi}`;
+    const hebrewDaf=dafYomiHebrew(day.dafYomi);
+    ctx.font = "700 12px Arial, sans-serif";
+    ctx.textAlign = "right";
+    if(hebrewDaf){
+      ctx.save();
+      ctx.direction = "rtl";
+      ctx.fillText(hebrewDaf, 630, footerTop + 9);
+      ctx.restore();
+      const hebrewWidth=ctx.measureText(hebrewDaf).width;
+      ctx.textAlign = "right";
+      ctx.fillText(englishDaf, 630-hebrewWidth-18, footerTop + 9);
+    }else{
+      ctx.fillText(englishDaf, 630, footerTop + 9);
+    }
   }
   ctx.textAlign = "left";
 }
