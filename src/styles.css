@@ -1803,3 +1803,50 @@ body{color:#172b26}
     overflow-wrap:anywhere;
   }
 }
+
+
+/* Monthly Setup month-first flow */
+.monthlyMonthPanel{display:grid;gap:18px}
+.monthlyMonthPicker{margin-bottom:0}
+.monthlyMonthSelect{
+  min-width:180px;
+  display:grid;
+  gap:5px;
+  font-size:11px;
+  font-weight:850;
+  color:#29423b;
+}
+.monthlyMonthSelect select{
+  border:1px solid #cbdcd6;
+  border-radius:9px;
+  padding:10px 12px;
+  background:#fff;
+  color:#20312d;
+  font-weight:800;
+}
+.monthlyMonthCurrent{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:#eef7f3;
+  color:#315e52;
+}
+.monthlyMonthCurrent span{font-size:11px;font-weight:750}
+.monthlyMonthCurrent strong{font-size:15px}
+.monthlySection{
+  display:grid;
+  gap:12px;
+  padding-top:16px;
+  border-top:1px solid #e2ebe7;
+}
+.monthlySectionHead h3{
+  margin:2px 0 0;
+  font-size:17px;
+  color:#20312d;
+}
+@media(max-width:700px){
+  .monthlyMonthPicker{display:grid}
+  .monthlyMonthSelect{width:100%;min-width:0}
+}
