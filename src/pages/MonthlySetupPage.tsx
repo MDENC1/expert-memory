@@ -1376,8 +1376,13 @@ export default function MonthlySetupPage({
     if(focusedEvent){
       const parts=hebrewPartsForDate(new Date(`${focusedEvent.date}T12:00:00`));
       const targetMonth=normalizeHebrewMonthName(parts.month);
+      const eventYear=Number(parts.year);
+      const thisHebrewYear=currentHebrewYear();
       if(jewishMonthTemplates.some(item=>item.month===targetMonth)){
         setMonth(targetMonth);
+      }
+      if(Number.isFinite(eventYear)){
+        setPlanNextYear(eventYear===thisHebrewYear+1);
       }
     }
 
@@ -1399,19 +1404,40 @@ export default function MonthlySetupPage({
           <div>
             <span className="eyebrow">Jewish month</span>
             <h2>Choose the Month You’re Working On</h2>
-            <p className="helperText">Special dates are shown below in Hebrew-date order. Regular shul times are preloaded so you only change what is different.</p>
+            <p className="helperText">Monthly Setup defaults to the current Hebrew year. Use Plan Next Year only when you intentionally want to prepare the following year.</p>
           </div>
-          <label className="monthlyMonthSelect">
-            <span>Month</span>
-            <select value={month} onChange={e=>{setMonth(e.target.value);setStatus("");}}>
-              {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
-            </select>
-          </label>
+          <div className="monthlyPeriodControls">
+            <label className="monthlyMonthSelect">
+              <span>Month</span>
+              <select value={month} onChange={e=>{setMonth(e.target.value);setStatus("");setCollapsedDates({});}}>
+                {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
+              </select>
+            </label>
+            <div className="monthlyYearPicker">
+              <span>Year</span>
+              <div className="monthlyYearChoices">
+                <button
+                  type="button"
+                  className={!planNextYear?"choice active":"choice"}
+                  onClick={()=>{setPlanNextYear(false);setStatus("");setCollapsedDates({});}}
+                >
+                  Current Year · {currentHebrewYear()}
+                </button>
+                <button
+                  type="button"
+                  className={planNextYear?"choice active":"choice"}
+                  onClick={()=>{setPlanNextYear(true);setStatus("");setCollapsedDates({});}}
+                >
+                  Plan Next Year · {currentHebrewYear()+1}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="monthlyMonthCurrent">
-          <span>Working on</span>
-          <strong>{month}{monthOccurrence?.year?` ${monthOccurrence.year}`:""}</strong>
+          <span>{planNextYear?"Planning next year":"Current Hebrew year"}</span>
+          <strong>{month} {activeHebrewYear}</strong>
           {monthOccurrence&&<small>{monthlyEnglishDate(monthOccurrence.start)} – {monthlyEnglishDate(monthOccurrence.end)}</small>}
         </div>
 
