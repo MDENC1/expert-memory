@@ -1667,7 +1667,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
                     <div className="recurrenceSummary">
                       {recurrenceSummary}
-                      {newStartAt&&newEndAt&&<span className="recurrenceRange"> · ${newStartAt} → ${newEndAt}</span>}
+                      {newStartAt&&newEndAt&&<span className="recurrenceRange"> · {newStartAt} → {newEndAt}</span>}
                     </div>
                   </>
                 )}
