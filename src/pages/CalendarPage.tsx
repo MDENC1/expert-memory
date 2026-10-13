@@ -323,6 +323,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     [monthCells]
   );
   const firstDow=new Date(year,month,1,12).getDay();
+  const printWeekCount=Math.ceil((firstDow+monthCells.length)/7);
   const startDate=`${year}-${pad(month+1)}-01`;
   const endDate=`${year}-${pad(month+1)}-${pad(new Date(year,month+1,0).getDate())}`;
   const zmanimStartDate=isoDate(new Date(year,month,1-6,12));
@@ -1656,7 +1657,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           <div className="printHebrewMonths" dir="rtl">{printHebrewMonths}</div>
         </div>
 
-        <div className="printCalendarGrid">
+        <div className={`printCalendarGrid printWeeks${printWeekCount}`}>
           {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Shabbos"].map(day=>(
             <div className="printWeekday" key={day}>{day}</div>
           ))}
