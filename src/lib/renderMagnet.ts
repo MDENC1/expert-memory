@@ -175,20 +175,35 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
   const noticeTop = 378;
   const footerTop = 452;
   const splitBottom = noticeTop - 10;
-  const leftX = 18;
-  const rightX = 334;
-  const columnWidth = 294;
+
+  // Main content is intentionally 40:60 — Zmanim gets 40% and the
+  // shul schedule gets 60%. The shul side needs more room for special
+  // events, multiple minyanim, and longer service labels.
+  const contentLeft = 18;
+  const contentRight = 630;
+  const contentWidth = contentRight - contentLeft;
+  const zmanimWidth = Math.round(contentWidth * 0.4);
+  const dividerX = contentLeft + zmanimWidth;
+  const columnGap = 14;
+  const leftX = contentLeft;
+  const rightX = dividerX + columnGap;
+  const leftWidth = dividerX - leftX - columnGap;
+  const rightWidth = contentRight - rightX;
 
   ctx.font = "900 19px Arial, sans-serif";
   ctx.fillText("ZMANIM", leftX, contentTop);
-  ctx.fillText(day.holiday ? clippedText(ctx, day.holiday.toUpperCase(), 260) : "SHUL", rightX, contentTop);
+  ctx.fillText(
+    day.holiday ? clippedText(ctx, day.holiday.toUpperCase(), rightWidth) : "SHUL",
+    rightX,
+    contentTop
+  );
 
-  ctx.fillRect(320, contentTop, 2, splitBottom - contentTop);
-  ctx.fillRect(18, contentTop + 30, 612, 2);
+  ctx.fillRect(dividerX, contentTop, 2, splitBottom - contentTop);
+  ctx.fillRect(contentLeft, contentTop + 30, contentWidth, 2);
 
   let leftY = contentTop + 43;
   for (const row of (day.zmanimRows || []).slice(0, 7)) {
-    drawRow(ctx, row.label, row.time, leftX, leftY, columnWidth - 14, 165);
+    drawRow(ctx, row.label, row.time, leftX, leftY, leftWidth, 120);
     leftY += 31;
   }
 
@@ -207,10 +222,10 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
 
   let rightY = contentTop + 43;
   for (const row of scheduleRows.slice(0, 6)) {
-    drawRow(ctx, row.label, row.time, rightX, rightY, columnWidth, 170);
+    drawRow(ctx, row.label, row.time, rightX, rightY, rightWidth, 205);
     if (row.note) {
       ctx.font = "12px Arial, sans-serif";
-      ctx.fillText(clippedText(ctx, row.note, 265), rightX, rightY + 20);
+      ctx.fillText(clippedText(ctx, row.note, rightWidth - 8), rightX, rightY + 20);
       rightY += 15;
     }
     rightY += 31;
