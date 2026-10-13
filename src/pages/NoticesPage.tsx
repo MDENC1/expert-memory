@@ -258,6 +258,7 @@ export default function NoticesPage({
         notice.id===editingNoticeId
           ?{
               ...notice,
+              status:deleteOccurrenceDate===today?"scheduled":notice.status,
               recurrence:{
                 ...(notice.recurrence||{enabled:true}),
                 enabled:true,
