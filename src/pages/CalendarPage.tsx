@@ -363,9 +363,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         __error:`Hebcal: ${String(hebcalErr?.message||hebcalErr)}`
       }));
 
-      // Load the editable schedule data first so the calendar becomes usable
-      // without waiting for slower external timing services.
-      const [daysRes,entriesRes,overridesRes,zmanimSettingsRes]=await supabasePromise;
+      const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes,hebcalRes]=await Promise.all([supabasePromise,zmanimPromise,hebcalPromise]);
       if(cancelled)return;
 
       const err=daysRes.error||entriesRes.error||overridesRes.error||zmanimSettingsRes.error;
@@ -397,13 +395,6 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           });
         }
       }
-
-      // The interactive calendar is ready now. MyZmanim and Hebcal continue
-      // loading in the background and fill in calculated/special-day data.
-      setLoading(false);
-
-      const [zmanimRes,hebcalRes]=await Promise.all([zmanimPromise,hebcalPromise]);
-      if(cancelled)return;
 
       if((zmanimRes as any).__error){
         setZmanim({});
@@ -451,6 +442,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         setHebcalError("");
       }
 
+      setLoading(false);
     }
     loadMonth();
     return()=>{cancelled=true};
