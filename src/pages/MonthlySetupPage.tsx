@@ -473,6 +473,12 @@ export default function MonthlySetupPage({
   setDays,
   shulId="",
   specialCalendarEvents=[],
+  scheduleEntries=[],
+  postalCode="",
+  countryCode="US",
+  locationId="",
+  zmanDefaults=FOCUSED_DEFAULTS,
+  shabbosEndMinutes=60,
   focusGroup="",
   onClearFocus,
   onSpecialSchedulesChanged
@@ -481,35 +487,32 @@ export default function MonthlySetupPage({
   setDays:(d:CalendarDay[])=>void;
   shulId?:string;
   specialCalendarEvents?:HebcalSpecialEvent[];
+  scheduleEntries?:LiveScheduleEntry[];
+  postalCode?:string;
+  countryCode?:string;
+  locationId?:string;
+  zmanDefaults?:FocusedZmanDefaults;
+  shabbosEndMinutes?:number;
   focusGroup?:string;
   onClearFocus?:()=>void;
   onSpecialSchedulesChanged?:()=>void;
 }) {
   const [month,setMonth] = useState("Tishrei");
-  const [postalCode,setPostalCode] = useState("44124");
-  const [fastEndRule,setFastEndRule] = useState<FastEndRule>(42);
-  const [status,setStatus] = useState("MyZmanim settings are current.");
+  const [status,setStatus] = useState("");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
+  const [monthlyScheduleOverrides,setMonthlyScheduleOverrides] = useState<Record<string,Partial<Record<MonthlyService,string>>>>({});
+  const [monthlyZmanim,setMonthlyZmanim] = useState<FocusedZmanimBatch>({});
+  const [monthHebcalEvents,setMonthHebcalEvents] = useState<HebcalSpecialEvent[]>([]);
+  const [monthlyLoading,setMonthlyLoading] = useState(false);
+  const [monthlyError,setMonthlyError] = useState("");
+  const [monthlySaving,setMonthlySaving] = useState(false);
   const [focusedUnits,setFocusedUnits] = useState<FocusedSpecialUnit[]>([]);
   const [focusedDrafts,setFocusedDrafts] = useState<Record<string,FocusedScheduleRow[]>>({});
   const [focusedLoading,setFocusedLoading] = useState(false);
   const [focusedError,setFocusedError] = useState("");
   const [focusedSavingUnit,setFocusedSavingUnit] = useState("");
 
-  const [values,setValues] = useState<SpecialValues>({
-    selichos:"06:00",
-    rh_shacharis:"08:00",
-    shofar:"10:30",
-    yk_kol_nidrei:"18:25",
-    yk_shacharis:"08:30",
-    yk_yizkor:"11:15",
-    yk_neilah:"17:45",
-    sukkos_shacharis:"09:00",
-    hoshana_rabbah:"06:30",
-    shemini_yizkor:"10:45",
-    hakafos_night:"19:45",
-    hakafos_day:"10:45"
-  });
+  const [values,setValues] = useState<SpecialValues>({});
 
   useEffect(()=>{
     if(!focusGroup||!shulId){
