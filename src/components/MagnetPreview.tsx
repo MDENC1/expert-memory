@@ -30,28 +30,25 @@ export default function MagnetPreview({
     <div className={fit ? "panel previewPanel fitPreviewPanel" : "panel previewPanel"}>
       <div className="panelHead">
         <div>
-          <span className="eyebrow">648 × 480 preview · LIVE DAY</span>
+          <span className="eyebrow">Goal product · roughly 6&quot; × 4&quot;</span>
           <h2>Magnet Preview</h2>
         </div>
-        <span className="pill">Monochrome</span>
+        <span className="pill">E-paper</span>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={MAGNET_WIDTH}
-        height={MAGNET_HEIGHT}
-        aria-label="Live e-paper magnet preview"
-        style={{
-          display: "block",
-          width: "100%",
-          height: "auto",
-          maxWidth: MAGNET_WIDTH,
-          margin: fit ? "0 auto" : undefined,
-          background: "#fff",
-          border: "1px solid #111",
-          borderRadius: 8,
-        }}
-      />
+      <div className="goalMagnetPreviewWrap">
+        <div className="goalMagnetDevice" aria-label="Goal refrigerator magnet product preview">
+          <div className="goalMagnetScreen">
+            <canvas
+              ref={canvasRef}
+              width={MAGNET_WIDTH}
+              height={MAGNET_HEIGHT}
+              aria-label="Live e-paper screen preview"
+            />
+          </div>
+        </div>
+        <small className="goalMagnetCaption">Concept enclosure · screen content shown at the target 648 × 480 layout</small>
+      </div>
     </div>
   );
 }
