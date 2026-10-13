@@ -1,4 +1,5 @@
 import zipToTzModule from "npm:zip-to-tz@1.1.0";
+import { createClient } from "npm:@supabase/supabase-js@2.49.1";
 
 const zipToTz:any =
   typeof zipToTzModule === "function"
@@ -14,6 +15,30 @@ const headers = {
   "Content-Type": "application/x-www-form-urlencoded",
   Accept: "application/json",
 };
+
+function createAdminClient(){
+  const url=Deno.env.get("SUPABASE_URL");
+  let key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
+
+  if(!key){
+    const raw=Deno.env.get("SUPABASE_SECRET_KEYS");
+    if(raw){
+      try{
+        const parsed=JSON.parse(raw);
+        key=String(parsed?.default||Object.values(parsed||{})[0]||"");
+      }catch{
+        key="";
+      }
+    }
+  }
+
+  if(!url||!key)return null;
+  return createClient(url,key,{
+    auth:{persistSession:false,autoRefreshToken:false}
+  });
+}
+
+const supabaseAdmin=createAdminClient();
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -206,14 +231,35 @@ Deno.serve(async (req) => {
     let place: Record<string, unknown> | null = null;
 
     const results:Array<{date:string;data:any}>=[];
+    const cachedDates=new Set<string>();
 
-    // Keep MyZmanim traffic bounded. The admin UI can ask for a month of
-    // dates, and React development mode may issue duplicate requests.
-    // Small batches prevent a browser refresh from turning into dozens of
-    // simultaneous upstream calls.
-    const batchSize=4;
-    for(let i=0;i<dates.length;i+=batchSize){
-      const batch=dates.slice(i,i+batchSize);
+    // MyZmanim GetDay data is deterministic for a location/date, so reuse
+    // previously fetched days. Cache failures never block normal operation.
+    if(supabaseAdmin){
+      const {data:cacheRows,error:cacheReadError}=await supabaseAdmin
+        .from("zmanim_daily_cache")
+        .select("zman_date,payload")
+        .eq("location_id",locationId)
+        .in("zman_date",dates);
+
+      if(cacheReadError){
+        console.warn("MyZmanim cache read failed:",cacheReadError.message);
+      }else{
+        for(const row of cacheRows||[]){
+          const date=String(row.zman_date);
+          if(!dates.includes(date)||!row.payload)continue;
+          cachedDates.add(date);
+          results.push({date,data:row.payload});
+        }
+      }
+    }
+
+    const missingDates=dates.filter(date=>!cachedDates.has(date));
+
+    // Keep upstream traffic bounded. Only cache misses reach MyZmanim.
+    const batchSize=6;
+    for(let i=0;i<missingDates.length;i+=batchSize){
+      const batch=missingDates.slice(i,i+batchSize);
       const batchResults=await Promise.all(batch.map(async (date) => {
         try{
           const data=await getDay(user,key,locationId,date);
@@ -223,7 +269,26 @@ Deno.serve(async (req) => {
         }
       }));
       results.push(...batchResults);
-      if(i+batchSize<dates.length)await new Promise(resolve=>setTimeout(resolve,75));
+
+      if(supabaseAdmin&&batchResults.length){
+        const {error:cacheWriteError}=await supabaseAdmin
+          .from("zmanim_daily_cache")
+          .upsert(
+            batchResults.map(({date,data})=>({
+              location_id:locationId,
+              zman_date:date,
+              payload:data,
+              fetched_at:new Date().toISOString()
+            })),
+            {onConflict:"location_id,zman_date"}
+          );
+
+        if(cacheWriteError){
+          console.warn("MyZmanim cache write failed:",cacheWriteError.message);
+        }
+      }
+
+      if(i+batchSize<missingDates.length)await new Promise(resolve=>setTimeout(resolve,50));
     }
 
     for (const { date, data } of results) {
@@ -257,6 +322,10 @@ Deno.serve(async (req) => {
       location_id: locationId,
       place,
       times: { plagHaMincha, sunset, sunrise, latestShema, midday, candleLighting, sources },
+      cache: {
+        hits: cachedDates.size,
+        misses: missingDates.length
+      }
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
