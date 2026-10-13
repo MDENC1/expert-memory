@@ -1150,140 +1150,22 @@ export default function MonthlySetupPage({
     setFastOverrides(v=>({...v,[key]:{...v[key],[field]:value}}));
   };
 
-  if(focusGroup){
-    const focusEvents=specialCalendarEvents.filter(event=>event.group_key===focusGroup);
-    const focusLabel=focusEvents[0]?.group_label || "Special Schedule";
-    const missingDateCount=focusedUnits.reduce((sum,unit)=>sum+unit.events.length,0);
+  useEffect(()=>{
+    if(!focusGroup)return;
+    const focusedEvent=specialCalendarEvents
+      .filter(event=>event.group_key===focusGroup)
+      .sort((a,b)=>a.date.localeCompare(b.date))[0];
 
-    return (
-      <>
-        <div className="pageHeader">
-          <div>
-            <span className="eyebrow">Monthly Setup · Needs attention</span>
-            <h1>{focusLabel}</h1>
-            <p>Regular shul times are shown as the default. Leave an override blank to keep the regular time.</p>
-          </div>
-          {onClearFocus&&<button className="secondary" onClick={onClearFocus}>Show All Monthly Setup</button>}
-        </div>
+    if(focusedEvent){
+      const parts=hebrewPartsForDate(new Date(`${focusedEvent.date}T12:00:00`));
+      const targetMonth=normalizeHebrewMonthName(parts.month);
+      if(jewishMonthTemplates.some(item=>item.month===targetMonth)){
+        setMonth(targetMonth);
+      }
+    }
 
-        {focusedError&&(
-          <div className="panel" style={{marginBottom:14,borderColor:"#c44"}}>
-            <strong>Setup error:</strong> {focusedError}
-          </div>
-        )}
-
-        {focusedLoading ? (
-          <div className="panel"><strong>Loading regular shul times and checking what still needs confirmation…</strong></div>
-        ) : focusedUnits.length===0 ? (
-          <div className="panel specialSetupComplete">
-            <span className="eyebrow">Complete</span>
-            <h2>All {focusLabel} dates are confirmed.</h2>
-            <p className="helperText">The dashboard reminder will stay cleared unless a schedule is changed or a new required date appears.</p>
-          </div>
-        ) : (
-          <div className="focusedSpecialSetupList">
-            <div className="panel focusedSpecialSummary">
-              <strong>{missingDateCount} date{missingDateCount===1?"":"s"} still need confirmation</strong>
-              <span>Regular times are preloaded below. Override only what is different for the special schedule.</span>
-            </div>
-
-            {focusedUnits.map(unit=>{
-              const rows=focusedDrafts[unit.id]||[];
-              return (
-                <div className={`panel focusedSpecialCard ${unit.isCholHamoed?"cholHamoedGroup":""}`} key={unit.id}>
-                  <div className="panelHead">
-                    <div>
-                      <span className="eyebrow">{focusedDateRangeLabel(unit.events)}</span>
-                      <h2>{unit.label}</h2>
-                      <p className="helperText">
-                        {unit.isCholHamoed
-                          ?`Grouped once for all ${unit.events.length} Chol Hamoed dates. Each date keeps its own regular calculated time unless you override it here.`
-                          :"The regular schedule is the default. Add an override only where this special date is different."}
-                      </p>
-                    </div>
-                    {unit.isCholHamoed&&<span className="sourceBadge">Grouped CH&quot;M</span>}
-                  </div>
-
-                  <div className="focusedSpecialRows">
-                    {rows.map((row,index)=>{
-                      const datedRegulars=unit.events
-                        .map(event=>({date:event.date,time:row.regularByDate[event.date]||""}))
-                        .filter(item=>item.time);
-                      const uniqueTimes=[...new Set(datedRegulars.map(item=>item.time))];
-
-                      return (
-                        <div className="focusedSpecialRow regularDefaultRow" key={index}>
-                          <label>
-                            <span>Schedule item</span>
-                            <input
-                              value={row.label}
-                              placeholder="Shacharis"
-                              onChange={e=>updateFocusedRow(unit.id,index,"label",e.target.value)}
-                            />
-                          </label>
-
-                          <div className="regularTimeDefault">
-                            <span>Regular schedule</span>
-                            {datedRegulars.length===0 ? (
-                              <strong>No regular time</strong>
-                            ) : uniqueTimes.length===1 ? (
-                              <>
-                                <strong>{focusedPretty24(uniqueTimes[0])}</strong>
-                                <small>{unit.events.length>1?"Applies automatically to each matching date":"Current regular time"}</small>
-                              </>
-                            ) : (
-                              <>
-                                <strong>Varies by date</strong>
-                                <div className="regularTimeDateList">
-                                  {datedRegulars.map(item=>(
-                                    <small key={item.date}>
-                                      {new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric"})
-                                        .format(new Date(`${item.date}T12:00:00`))}: {focusedPretty24(item.time)}
-                                    </small>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          <label>
-                            <span>Override</span>
-                            <input
-                              type="time"
-                              value={row.overrideTime}
-                              onChange={e=>updateFocusedRow(unit.id,index,"overrideTime",e.target.value)}
-                            />
-                            <small>{row.overrideTime?"Using override":"Blank = use regular time"}</small>
-                          </label>
-
-                          <button className="secondary focusedRemoveRow" onClick={()=>removeFocusedRow(unit.id,index)}>Remove</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="focusedSpecialActions">
-                    <button className="secondary" onClick={()=>addFocusedRow(unit.id)}>+ Add Special Time</button>
-                    <button
-                      className="primary"
-                      disabled={focusedSavingUnit===unit.id}
-                      onClick={()=>confirmFocusedUnit(unit)}
-                    >
-                      {focusedSavingUnit===unit.id
-                        ?"Saving…"
-                        :unit.isCholHamoed
-                          ?`Confirm All ${unit.events.length} Chol Hamoed Dates`
-                          :"Confirm This Date"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </>
-    );
-  }
+    onClearFocus?.();
+  },[focusGroup,specialCalendarEvents]);
 
   return (
     <>
