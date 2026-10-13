@@ -318,6 +318,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const month=viewDate.getMonth();
   const monthName=new Intl.DateTimeFormat("en-US",{month:"long",year:"numeric"}).format(viewDate);
   const monthCells=useMemo(()=>buildMonth(year,month),[year,month]);
+  const printHebrewMonths=useMemo(
+    ()=>Array.from(new Set(monthCells.map(cell=>cell.hebrewMonth))).join(" / "),
+    [monthCells]
+  );
   const firstDow=new Date(year,month,1,12).getDay();
   const startDate=`${year}-${pad(month+1)}-01`;
   const endDate=`${year}-${pad(month+1)}-${pad(new Date(year,month+1,0).getDate())}`;
@@ -1406,6 +1410,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           <button className="secondary" onClick={()=>changeMonth(-1)}>← Previous</button>
           <button className="secondary" onClick={()=>{setViewDate(new Date());setShowAdd(false)}}>This Month</button>
           <button className="secondary" onClick={()=>changeMonth(1)}>Next →</button>
+          <button className="primary printCalendarButton" disabled={loading} onClick={()=>window.print()}>Print Calendar</button>
         </div>
       </div>
 
@@ -1641,6 +1646,77 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           )}
         </aside>
       </div>
+
+      <section className="printCalendarSheet" aria-hidden="true">
+        <div className="printCalendarHeader">
+          <div>
+            <strong>{shulName}</strong>
+            <h1>{monthName}</h1>
+          </div>
+          <div className="printHebrewMonths" dir="rtl">{printHebrewMonths}</div>
+        </div>
+
+        <div className="printCalendarGrid">
+          {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Shabbos"].map(day=>(
+            <div className="printWeekday" key={day}>{day}</div>
+          ))}
+          {Array.from({length:firstDow}).map((_,index)=>(
+            <div className="printDayCell printDayEmpty" key={`print-blank-${index}`} />
+          ))}
+          {monthCells.map(cell=>{
+            const rows=rowsForDate(cell.date);
+            const keyTimes=keyTimesForDate(cell.date);
+            const special=dayMap.get(cell.date);
+            const hebcalEvent=primaryHebcalEvent(cell.date);
+            const holiday=special?.title && !/^tishrei schedule$/i.test(special.title)
+              ? special.title
+              : hebcalEvent?.title;
+            const matching=notices.filter(notice=>noticeMatchesDate(notice,cell.date));
+
+            return (
+              <div className={`printDayCell ${cell.isShabbos?"printShabbos":""}`} key={`print-${cell.date}`}>
+                <div className="printDateLine">
+                  <strong>{cell.day}</strong>
+                  <span dir="rtl">{cell.hebrewDay} {cell.hebrewMonth}</span>
+                </div>
+
+                {holiday&&<div className="printSpecialDate">{holiday}</div>}
+
+                {keyTimes.length>0&&(
+                  <div className="printKeyTimes">
+                    {keyTimes.map(item=>(
+                      <div key={item.key}><b>{item.label}:</b> {item.time}</div>
+                    ))}
+                  </div>
+                )}
+
+                {rows.length>0&&(
+                  <div className="printMinyanim">
+                    {rows.map((row,index)=>(
+                      <div key={`${cell.date}-row-${index}`}>
+                        <b>{row.label}</b>{row.time&&<span>{row.time}</span>}
+                        {row.note&&<small>{row.note}</small>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {matching.length>0&&(
+                  <div className="printNotices">
+                    {matching.map(notice=>(
+                      <div key={`${cell.date}-notice-${notice.id}`}>
+                        {notice.eventTime&&<b>{notice.eventTime} · </b>}
+                        {notice.headline}
+                        {notice.recurrence?.enabled&&<span> ↻</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {showAdd && selected.length>0 && (
         <div className="calendarModalBackdrop" onMouseDown={()=>{setShowAdd(false);setEditingNoticeId(null)}}>
