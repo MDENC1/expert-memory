@@ -438,9 +438,18 @@ function buildLiveDay(
       return {label,time:displayRule(r)};
     });
 
+  const additiveRows=(
+    specialDay?.confirmed_at&&!specialDay.replace_normal_schedule&&specialEntries.length
+  ) ? specialEntries.map(entry=>({
+    label:entry.title,
+    time:entry.event_time?prettyTime(entry.event_time):undefined,
+    note:entry.note||undefined
+  })) : [];
+
   return {
     ...base,
-    shulScheduleRows:rows
+    shulScheduleRows:[...rows,...additiveRows],
+    event:additiveRows.length&&specialDay?.title ? specialDay.title : undefined
   };
 }
 
