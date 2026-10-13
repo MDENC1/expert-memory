@@ -1418,6 +1418,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         recurrence_type:recurring?newFrequency:null,
         recurrence_weekdays:recurring&&newFrequency==="weekly"?newWeekdays:[],
         recurrence_month_days:recurring&&newFrequency==="monthly"?newMonthDays:[],
+        recurrence_excluded_dates:recurring?(existing?.recurrence?.excludedDates||[]):[],
         updated_at:new Date().toISOString(),
         ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
       };
