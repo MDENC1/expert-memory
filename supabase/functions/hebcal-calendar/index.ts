@@ -39,7 +39,7 @@ function normalizeTitle(value:string){
 function classify(item:CalendarItem):Omit<SpecialEvent,"date"|"title"|"hdate"|"hebrew"|"yomtov"|"subcat">|null{
   const raw=String(item.title||"");
   const t=normalizeTitle(raw);
-  const isCholHamoed=/chol ha moed|ch m/.test(t);
+  const isCholHamoed=/chol ha moed|ch m|chm/.test(t);
   const isHoshana=/hoshana rab/.test(t);
   const isFast=/tzom gedalia|asara b ?tevet|tevet.*fast|taanit esther|fast of esther|17th of tammuz|tzom tammuz|tisha b ?av|tish a b ?av/.test(t);
 
@@ -182,7 +182,7 @@ Deno.serve(async (req)=>{
         hebrew:item.hebrew?String(item.hebrew):null,
         yomtov:Boolean(item.yomtov),
         subcat:item.subcat?String(item.subcat):null,
-        is_chol_hamoed:/chol ha moed|ch m/.test(normalizeTitle(String(item.title||""))),
+        is_chol_hamoed:/chol ha moed|ch m|chm/.test(normalizeTitle(String(item.title||""))),
         ...classified
       }];
     });
