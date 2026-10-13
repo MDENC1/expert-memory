@@ -945,11 +945,19 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setShowAdd(false);
   };
 
-  const handleDayClick=(date:string)=>{
-    if (multiMode) {
+  const handleDayClick=(date:string,shiftKey=false)=>{
+    if(shiftKey){
+      setMultiMode(true);
+      setSelected(v=>v.includes(date)?v.filter(x=>x!==date):[...v,date].sort());
+      setShowAdd(false);
+      return;
+    }
+
+    if(multiMode){
       setSelected(v=>v.includes(date)?v.filter(x=>x!==date):[...v,date].sort());
       return;
     }
+
     setSelected([date]);
     setShowAdd(false);
   };
@@ -1426,7 +1434,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
           {multiMode ? "Multi-Day Edit On" : "Multi-Day Edit"}
         </button>
-        <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet.")}</span>
+        <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet. Tip: Shift-click to select multiple days.")}</span>
         {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>}
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={openAddModal}>+ Add Event / Notice</button>}
@@ -1454,7 +1462,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 <button
                   key={cell.date}
                   className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""} ${missingSpecial?"missingSpecialSchedule":""} ${isToday?"today":""}`}
-                  onClick={()=>handleDayClick(cell.date)}
+                  onClick={e=>handleDayClick(cell.date,e.shiftKey)}
                 >
                   <div className="dateTop"><strong>{cell.day}</strong><span>{cell.hebrewDay} {cell.hebrewMonth}</span></div>
                   <div className="dayTags">
