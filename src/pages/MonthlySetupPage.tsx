@@ -1570,11 +1570,6 @@ export default function MonthlySetupPage({
                         + Add Special Event
                       </button>
 
-                      {month==="Tishrei"&&(
-                        <datalist id="tishrei-special-event-suggestions">
-                          <option value="Simchas Beis Hashoeva" />
-                        </datalist>
-                      )}
                     </div>
                   )}
 
@@ -1630,6 +1625,12 @@ export default function MonthlySetupPage({
               );
             })}
           </div>
+        )}
+
+        {month==="Tishrei"&&(
+          <datalist id="tishrei-special-event-suggestions">
+            <option value="Simchas Beis Hashoeva" />
+          </datalist>
         )}
 
         <div className="monthlySetupActions monthlySetupSaveBar">
