@@ -32,12 +32,12 @@ type FocusedZmanDefaults = {
 };
 
 const fastDays = [
-  {key:"gedalia",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
-  {key:"yom_kippur",name:"Yom Kippur",startSource:"MyZmanim sunset / candle-lighting",autoStart:"6:43 PM",sunsetMinutes:18*60+58},
-  {key:"teves",name:"Asarah B'Teves",startSource:"MyZmanim Alos",autoStart:"6:12 AM",sunsetMinutes:17*60+7},
-  {key:"esther",name:"Taanis Esther",startSource:"MyZmanim Alos",autoStart:"5:31 AM",sunsetMinutes:18*60+39},
-  {key:"tammuz",name:"17 Tammuz",startSource:"MyZmanim Alos",autoStart:"4:31 AM",sunsetMinutes:20*60+51},
-  {key:"tisha_bav",name:"Tisha B'Av",startSource:"MyZmanim sunset",autoStart:"8:48 PM",sunsetMinutes:20*60+45}
+  {key:"gedalia",month:"Tishrei",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
+  {key:"yom_kippur",month:"Tishrei",name:"Yom Kippur",startSource:"MyZmanim sunset / candle-lighting",autoStart:"6:43 PM",sunsetMinutes:18*60+58},
+  {key:"teves",month:"Teves",name:"Asarah B'Teves",startSource:"MyZmanim Alos",autoStart:"6:12 AM",sunsetMinutes:17*60+7},
+  {key:"esther",month:"Adar",name:"Taanis Esther",startSource:"MyZmanim Alos",autoStart:"5:31 AM",sunsetMinutes:18*60+39},
+  {key:"tammuz",month:"Tammuz",name:"17 Tammuz",startSource:"MyZmanim Alos",autoStart:"4:31 AM",sunsetMinutes:20*60+51},
+  {key:"tisha_bav",month:"Av",name:"Tisha B'Av",startSource:"MyZmanim sunset",autoStart:"8:48 PM",sunsetMinutes:20*60+45}
 ];
 
 function formatMinutes(total:number) {
@@ -608,6 +608,10 @@ export default function MonthlySetupPage({
     () => jewishMonthTemplates.find(item => item.month === month) ?? jewishMonthTemplates[0],
     [month]
   );
+  const monthFastDays=useMemo(
+    ()=>fastDays.filter(fast=>fast.month===month),
+    [month]
+  );
 
   const displayTime = (value:string) => {
     const [h,m] = value.split(":").map(Number);
@@ -785,50 +789,52 @@ export default function MonthlySetupPage({
         </div>
       </div>
 
-      <div className="panel fastDaysPanel">
-        <div className="panelHead">
-          <div>
-            <span className="eyebrow">Fast days</span>
-            <h2>Fast Start & End Times</h2>
-            <p className="helperText">Automatic times below recalculate from the selected MyZmanim rule. Override any individual fast without affecting the rest.</p>
+      {monthFastDays.length>0&&(
+        <div className="panel fastDaysPanel">
+          <div className="panelHead">
+            <div>
+              <span className="eyebrow">Fast days · {month}</span>
+              <h2>Fast Start & End Times</h2>
+              <p className="helperText">Only fasts in {month} are shown here. Automatic times come from the configured MyZmanim rules; override an individual fast only when needed.</p>
+            </div>
+          </div>
+
+          <div className="fastDayList">
+            {monthFastDays.map(fast=>{
+              const override=fastOverrides[fast.key] ?? {};
+              const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
+              return (
+                <div className="fastDayRow" key={fast.key}>
+                  <div className="fastName">
+                    <strong>{fast.name}</strong>
+                    <small>{fast.startSource} · ZIP {postalCode}</small>
+                  </div>
+
+                  <label>
+                    <span>Fast begins</span>
+                    <div className="generatedTime">
+                      {override.start ? displayTime(override.start) : fast.autoStart}
+                      <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
+                    </div>
+                    <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
+                  </label>
+
+                  <label>
+                    <span>Fast ends</span>
+                    <div className="generatedTime">
+                      {override.end ? displayTime(override.end) : automaticEnd}
+                      <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
+                    </div>
+                    <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
+                  </label>
+
+                  <button className="secondary" onClick={()=>setFastOverrides(v=>{const next={...v};delete next[fast.key];return next;})}>Use Automatic</button>
+                </div>
+              );
+            })}
           </div>
         </div>
-
-        <div className="fastDayList">
-          {fastDays.map(fast=>{
-            const override=fastOverrides[fast.key] ?? {};
-            const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
-            return (
-              <div className="fastDayRow" key={fast.key}>
-                <div className="fastName">
-                  <strong>{fast.name}</strong>
-                  <small>{fast.startSource} · ZIP {postalCode}</small>
-                </div>
-
-                <label>
-                  <span>Fast begins</span>
-                  <div className="generatedTime">
-                    {override.start ? displayTime(override.start) : fast.autoStart}
-                    <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
-                  </div>
-                  <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
-                </label>
-
-                <label>
-                  <span>Fast ends</span>
-                  <div className="generatedTime">
-                    {override.end ? displayTime(override.end) : automaticEnd}
-                    <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
-                  </div>
-                  <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
-                </label>
-
-                <button className="secondary" onClick={()=>setFastOverrides(v=>{const next={...v};delete next[fast.key];return next;})}>Use Automatic</button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       <div className="panel">
         <div className="panelHead">
