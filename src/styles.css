@@ -1600,3 +1600,178 @@ body{color:#172b26}
   .selectedDayNoticeCard{grid-template-columns:1fr}
   .selectedDayNoticeEdit{width:100%}
 }
+
+
+/* Printable monthly calendar */
+.printCalendarSheet{display:none}
+
+@media print{
+  @page{
+    size:letter landscape;
+    margin:.28in;
+  }
+
+  html,body{
+    background:#fff!important;
+    width:100%;
+    margin:0!important;
+    padding:0!important;
+  }
+
+  body *{visibility:hidden!important}
+  .printCalendarSheet,
+  .printCalendarSheet *{visibility:visible!important}
+
+  .printCalendarSheet{
+    display:block!important;
+    position:absolute;
+    inset:0;
+    width:100%;
+    color:#000;
+    background:#fff;
+    font-family:Arial,Helvetica,sans-serif;
+  }
+
+  .printCalendarHeader{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:18px;
+    margin:0 0 8px;
+    padding-bottom:6px;
+    border-bottom:2px solid #000;
+  }
+
+  .printCalendarHeader strong{
+    display:block;
+    font-size:11pt;
+    margin-bottom:2px;
+  }
+
+  .printCalendarHeader h1{
+    margin:0;
+    font-size:20pt;
+    line-height:1;
+  }
+
+  .printHebrewMonths{
+    font-size:16pt;
+    font-weight:800;
+    text-align:right;
+  }
+
+  .printCalendarGrid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    border-left:1px solid #000;
+    border-top:1px solid #000;
+  }
+
+  .printWeekday{
+    padding:4px 3px;
+    border-right:1px solid #000;
+    border-bottom:1px solid #000;
+    text-align:center;
+    font-size:8pt;
+    font-weight:800;
+    background:#efefef!important;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .printDayCell{
+    min-height:1.18in;
+    padding:4px 5px;
+    border-right:1px solid #000;
+    border-bottom:1px solid #000;
+    overflow:hidden;
+    break-inside:avoid;
+    background:#fff!important;
+    font-size:6.8pt;
+    line-height:1.18;
+  }
+
+  .printDayEmpty{
+    background:#f7f7f7!important;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .printShabbos{
+    background:#fbf7ec!important;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .printDateLine{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:4px;
+    padding-bottom:2px;
+    margin-bottom:2px;
+    border-bottom:1px solid #aaa;
+  }
+
+  .printDateLine strong{font-size:10pt}
+  .printDateLine span{font-size:7.2pt;font-weight:700}
+
+  .printSpecialDate{
+    margin:2px 0 3px;
+    font-size:6.8pt;
+    font-weight:800;
+    text-align:center;
+    border:1px solid #777;
+    padding:2px 3px;
+  }
+
+  .printKeyTimes{
+    display:grid;
+    gap:1px;
+    margin-bottom:3px;
+    font-size:6.5pt;
+  }
+
+  .printMinyanim{
+    display:grid;
+    gap:1px;
+    margin-top:2px;
+  }
+
+  .printMinyanim>div{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:3px;
+    align-items:baseline;
+  }
+
+  .printMinyanim b{
+    font-weight:700;
+    overflow-wrap:anywhere;
+  }
+
+  .printMinyanim span{
+    font-weight:700;
+    white-space:nowrap;
+  }
+
+  .printMinyanim small{
+    grid-column:1/-1;
+    font-size:5.8pt;
+    font-style:italic;
+  }
+
+  .printNotices{
+    display:grid;
+    gap:1px;
+    margin-top:3px;
+    padding-top:2px;
+    border-top:1px dashed #777;
+    font-size:6.2pt;
+    font-weight:700;
+  }
+
+  .printNotices>div{
+    overflow-wrap:anywhere;
+  }
+}
