@@ -35,6 +35,7 @@ type FocusedZmanDefaults = {
 type MonthlyService = "Shacharis" | "Mincha" | "Maariv";
 type MonthlyAdditionalField = {key:string;label:string;helpText?:string;allowMultiple?:boolean};
 type MonthlyCustomEvent = {id:string;label:string;time:string};
+type ChanukahDateChoice = {date:string;hebrewLabel:string;englishLabel:string};
 type MonthlyDateCard = {
   date:string;
   hebrewDay:number;
@@ -57,9 +58,6 @@ const STATIC_MONTHLY_DATES:Record<string,Array<{
   title:string;
   additional:MonthlyAdditionalField[];
 }>>={
-  Kislev:[
-    {day:25,title:"Chanukah",additional:[{key:"chanukah_lighting",label:"Menorah Lighting"}]}
-  ],
   Shevat:[
     {day:15,title:"Tu B'Shvat",additional:[{key:"tu_bishvat_event",label:"Tu B'Shvat Program"}]}
   ],
@@ -905,6 +903,21 @@ export default function MonthlySetupPage({
     [month,activeHebrewYear]
   );
 
+  const chanukahDates=useMemo(()=>{
+    if(month!=="Kislev"||!monthOccurrence?.datesByDay[25])return [] as ChanukahDateChoice[];
+    const first=monthOccurrence.datesByDay[25];
+    return Array.from({length:8},(_,index)=>{
+      const date=focusedShiftDate(first,index);
+      const parts=hebrewPartsForDate(new Date(`${date}T12:00:00`));
+      const normalizedMonth=normalizeHebrewMonthName(parts.month);
+      return {
+        date,
+        hebrewLabel:`${monthlyHebrewDayText(parts.day)} ${monthlyHebrewMonthText(normalizedMonth)}`,
+        englishLabel:monthlyEnglishDate(date)
+      };
+    });
+  },[month,monthOccurrence?.datesByDay[25]]);
+
   useEffect(()=>{
     if(focusGroup||!monthOccurrence){
       setMonthHebcalEvents([]);
@@ -996,6 +1009,67 @@ export default function MonthlySetupPage({
     postalCode,
     countryCode,
     locationId
+  ]);
+
+  useEffect(()=>{
+    if(!shulId||!monthOccurrence){
+      setMonthlyCustomEvents({});
+      return;
+    }
+
+    let cancelled=false;
+    const rangeStart=monthOccurrence.start;
+    const rangeEnd=month==="Kislev"&&chanukahDates.length
+      ?chanukahDates[chanukahDates.length-1].date
+      :monthOccurrence.end;
+
+    async function loadSavedMonthlySpecialEvents(){
+      const {data,error}=await supabase
+        .from("special_schedule_entries")
+        .select("event_date,title,event_time,note,sort_order")
+        .eq("shul_id",shulId)
+        .eq("active",true)
+        .gte("event_date",rangeStart)
+        .lte("event_date",rangeEnd)
+        .order("event_date")
+        .order("sort_order");
+
+      if(cancelled)return;
+      if(error){
+        setMonthlyError(error.message);
+        return;
+      }
+
+      const grouped:Record<string,MonthlyCustomEvent[]>={};
+      (data||[]).forEach((row:any,index:number)=>{
+        const title=String(row.title||"").trim();
+        const isSavedCustom=row.note==="monthly_custom_event"
+          ||/simchas beis hashoeva/i.test(title)
+          ||/menorah lighting/i.test(title);
+        if(!isSavedCustom)return;
+
+        const date=String(row.event_date);
+        grouped[date]=[
+          ...(grouped[date]||[]),
+          {
+            id:`saved-${date}-${row.sort_order||index}-${index}`,
+            label:title,
+            time:row.event_time?String(row.event_time).slice(0,5):""
+          }
+        ];
+      });
+      setMonthlyCustomEvents(grouped);
+    }
+
+    void loadSavedMonthlySpecialEvents();
+    return()=>{cancelled=true;};
+  },[
+    shulId,
+    month,
+    activeHebrewYear,
+    monthOccurrence?.start,
+    monthOccurrence?.end,
+    chanukahDates.map(item=>item.date).join("|")
   ]);
 
   const monthlyCards=useMemo(()=>{
@@ -1094,6 +1168,41 @@ export default function MonthlySetupPage({
   };
 
   const customEventsForDate=(date:string)=>monthlyCustomEvents[date]||[];
+
+  const chanukahLightings=chanukahDates.flatMap(choice=>
+    customEventsForDate(choice.date)
+      .filter(event=>event.label.trim().toLowerCase()==="menorah lighting")
+      .map(event=>({...event,date:choice.date}))
+  );
+
+  const addChanukahLighting=()=>{
+    const date=chanukahDates[0]?.date;
+    if(!date)return;
+    setMonthlyCustomEvents(current=>({
+      ...current,
+      [date]:[
+        ...(current[date]||[]),
+        {
+          id:`menorah-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          label:"Menorah Lighting",
+          time:""
+        }
+      ]
+    }));
+  };
+
+  const updateChanukahLightingDate=(currentDate:string,id:string,nextDate:string)=>{
+    if(currentDate===nextDate)return;
+    setMonthlyCustomEvents(current=>{
+      const event=(current[currentDate]||[]).find(item=>item.id===id);
+      if(!event)return current;
+      return {
+        ...current,
+        [currentDate]:(current[currentDate]||[]).filter(item=>item.id!==id),
+        [nextDate]:[...(current[nextDate]||[]),event]
+      };
+    });
+  };
 
   const toggleDateCollapsed=(date:string)=>{
     setCollapsedDates(current=>({...current,[date]:!current[date]}));
@@ -1208,7 +1317,7 @@ export default function MonthlySetupPage({
       setMonthlyError("Monthly times are still loading.");
       return;
     }
-    if(!monthlyCards.length){
+    if(!monthlyCards.length&&month!=="Kislev"){
       setStatus(`No special schedule items need setup for ${month}.`);
       return;
     }
@@ -1351,11 +1460,70 @@ export default function MonthlySetupPage({
         throw new Error(`Regular schedule times are not available yet for ${monthlyEnglishDate(missingReplacement.event_date)}. Please wait for the automatic times to finish loading.`);
       }
 
-      const {error}=await supabase.rpc("confirm_special_schedule_group",{
-        p_shul_id:shulId,
-        p_dates:payload
-      });
-      if(error)throw error;
+      if(payload.length){
+        const {error}=await supabase.rpc("confirm_special_schedule_group",{
+          p_shul_id:shulId,
+          p_dates:payload
+        });
+        if(error)throw error;
+      }
+
+      if(month==="Kislev"&&chanukahDates.length===8){
+        const validDates=chanukahDates.map(item=>item.date);
+        const {error:deleteLightingError}=await supabase
+          .from("special_schedule_entries")
+          .delete()
+          .eq("shul_id",shulId)
+          .eq("title","Menorah Lighting")
+          .in("event_date",validDates);
+        if(deleteLightingError)throw deleteLightingError;
+
+        const lightingRows=chanukahLightings
+          .filter(item=>item.time)
+          .map((item,index)=>({
+            shul_id:shulId,
+            event_date:item.date,
+            title:"Menorah Lighting",
+            event_time:item.time,
+            approximate:false,
+            note:"monthly_custom_event",
+            sort_order:100+index*10,
+            active:true
+          }));
+
+        if(lightingRows.length){
+          const {error:lightingInsertError}=await supabase
+            .from("special_schedule_entries")
+            .insert(lightingRows);
+          if(lightingInsertError)throw lightingInsertError;
+
+          const configuredDates=[...new Set(lightingRows.map(item=>item.event_date))];
+          const {data:existingDays,error:existingDaysError}=await supabase
+            .from("special_schedule_days")
+            .select("event_date")
+            .eq("shul_id",shulId)
+            .in("event_date",configuredDates);
+          if(existingDaysError)throw existingDaysError;
+
+          const existingSet=new Set((existingDays||[]).map((row:any)=>String(row.event_date)));
+          const missingDays=configuredDates
+            .filter(date=>!existingSet.has(date))
+            .map(date=>({
+              shul_id:shulId,
+              event_date:date,
+              title:"Chanukah",
+              replace_normal_schedule:false,
+              confirmed_at:new Date().toISOString()
+            }));
+
+          if(missingDays.length){
+            const {error:dayInsertError}=await supabase
+              .from("special_schedule_days")
+              .insert(missingDays);
+            if(dayInsertError)throw dayInsertError;
+          }
+        }
+      }
 
       setStatus(`${month} saved. Special schedules were applied to the correct Hebrew dates.`);
       onSpecialSchedulesChanged?.();
@@ -1484,6 +1652,63 @@ export default function MonthlySetupPage({
           </div>
         )}
 
+        {!monthlyLoading&&month==="Kislev"&&chanukahDates.length===8&&(
+          <div className="monthlyMonthSpecialEvent">
+            <div className="monthlyAdditionalHead">
+              <div>
+                <span className="eyebrow">Special event</span>
+                <strong>Menorah Lighting</strong>
+              </div>
+              <span>Choose any of the eight Chanukah dates when the shul will hold a lighting. Add as many dates or times as needed.</span>
+            </div>
+
+            {chanukahLightings.length>0&&(
+              <div className="monthlyChanukahLightingList">
+                {chanukahLightings.map(lighting=>(
+                  <div className="monthlyChanukahLightingRow" key={lighting.id}>
+                    <label>
+                      <span>Date</span>
+                      <select
+                        value={lighting.date}
+                        onChange={e=>updateChanukahLightingDate(lighting.date,lighting.id,e.target.value)}
+                      >
+                        {chanukahDates.map(choice=>(
+                          <option key={choice.date} value={choice.date}>
+                            {`${choice.hebrewLabel} - ${choice.englishLabel}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Time</span>
+                      <input
+                        type="time"
+                        value={lighting.time}
+                        onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"time",e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="secondary monthlyRemoveTime"
+                      onClick={()=>removeMonthlyCustomEvent(lighting.date,lighting.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="secondary monthlyAddTime monthlyAddSpecialEvent"
+              onClick={addChanukahLighting}
+            >
+              + Add Menorah Lighting
+            </button>
+          </div>
+        )}
+
         {monthlyLoading ? (
           <div className="monthlySetupLoading">
             <strong>Loading {month} dates and regular shul times…</strong>
@@ -1491,7 +1716,9 @@ export default function MonthlySetupPage({
           </div>
         ) : monthlyCards.length===0 ? (
           <div className="emptyMonthSetup">
-            No standard special-date setup is needed for {month}.
+            {month==="Kislev"
+              ?"No other standard special-date setup is needed for Kislev."
+              :`No standard special-date setup is needed for ${month}.`}
           </div>
         ) : (
           <div className="monthlyDateList">
