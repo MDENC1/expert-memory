@@ -640,10 +640,6 @@ export default function MonthlySetupPage({
     setFastOverrides(v=>({...v,[key]:{...v[key],[field]:value}}));
   };
 
-  const saveAndRecalculate=()=>{
-    setStatus(`MyZmanim recalculated for ZIP ${postalCode}. All automatic fast-end times now use ${fastEndRule} minutes after sunset; manual overrides were preserved.`);
-  };
-
   if(focusGroup){
     const focusEvents=specialCalendarEvents.filter(event=>event.group_key===focusGroup);
     const focusLabel=focusEvents[0]?.group_label || "Special Schedule";
@@ -785,55 +781,7 @@ export default function MonthlySetupPage({
         <div>
           <span className="eyebrow">Guided setup</span>
           <h1>Monthly Setup</h1>
-          <p>Set shul-specific times and annual zmanim rules once. The calendar handles the dates.</p>
-        </div>
-      </div>
-
-      <div className="panel zmanimSettings">
-        <div className="panelHead">
-          <div>
-            <span className="eyebrow">Automatic zmanim</span>
-            <h2>MyZmanim</h2>
-            <p className="helperText">Candle lighting, Shabbos/Yom Tov endings and fast-day times are generated from MyZmanim for the shul's location.</p>
-          </div>
-          <span className="sourceBadge">Connected</span>
-        </div>
-
-        <div className="zmanimSettingsGrid">
-          <label>
-            <span>ZIP code</span>
-            <input value={postalCode} onChange={e=>setPostalCode(e.target.value.replace(/\D/g,"").slice(0,5))} />
-            <small>Admin only · never shown on the magnet.</small>
-          </label>
-
-          <label>
-            <span>Minor fast begins</span>
-            <div className="readOnlySetting">MyZmanim Alos / dawn</div>
-            <small>Calculated separately for each fast date.</small>
-          </label>
-
-          <label>
-            <span>Default fast-end rule</span>
-            <select value={fastEndRule} onChange={e=>setFastEndRule(Number(e.target.value) as FastEndRule)}>
-              <option value={42}>42 minutes after sunset</option>
-              <option value={60}>60 minutes after sunset</option>
-              <option value={72}>72 minutes after sunset</option>
-            </select>
-            <small>Changing this immediately recalculates all automatic fast-end times below.</small>
-          </label>
-
-          <div className="zmanimSave">
-            <strong>Yearly default</strong>
-            <span>Save the rule for the Jewish year while preserving individual overrides.</span>
-            <button className="primary" onClick={saveAndRecalculate}>Save & Recalculate Year</button>
-          </div>
-        </div>
-
-        <div className="sourceLine">
-          <strong>Times from MyZmanim</strong>
-          <span>ZIP {postalCode || "—"}</span>
-          <span>{fastEndRule}-minute default fast-end rule</span>
-          <span>Manual overrides allowed</span>
+          <p>Set month-specific special times and overrides. Automatic zmanim and location rules are managed in Settings.</p>
         </div>
       </div>
 
