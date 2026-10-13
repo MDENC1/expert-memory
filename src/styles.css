@@ -1867,7 +1867,7 @@ body{color:#172b26}
 }
 .monthlyDateHead{
   display:grid;
-  grid-template-columns:76px 1fr;
+  grid-template-columns:76px minmax(0,1fr) auto;
   gap:14px;
   align-items:center;
   padding:16px;
@@ -1986,7 +1986,7 @@ body{color:#172b26}
 @media(max-width:760px){
   .monthlyMonthCurrent{align-items:flex-start;flex-wrap:wrap}
   .monthlyMonthCurrent small{width:100%;margin-left:0}
-  .monthlyDateHead{grid-template-columns:60px 1fr}
+  .monthlyDateHead{grid-template-columns:60px minmax(0,1fr) auto}
   .monthlyServiceGridHead{display:none}
   .monthlyServiceRow{
     grid-template-columns:1fr;
@@ -2075,5 +2075,51 @@ body{color:#172b26}
   }
   .monthlyCustomEventRow .monthlyRemoveTime{
     justify-self:start;
+  }
+}
+
+
+/* Monthly Setup collapse controls */
+.monthlyCollapseBar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:2px 2px 4px;
+}
+.monthlyCollapseBar>span{
+  font-size:11px;
+  font-weight:800;
+  color:#667772;
+}
+.monthlyCollapseBar>div{
+  display:flex;
+  gap:7px;
+}
+.monthlyCollapseBar button,
+.monthlyCollapseToggle{
+  padding:7px 10px;
+  min-height:34px;
+  font-size:10px;
+}
+.monthlyDateTitle{
+  min-width:0;
+}
+.monthlyDateBody{
+  display:block;
+}
+.monthlyDateCard:has(.monthlyCollapseToggle[aria-expanded="false"]) .monthlyDateHead{
+  border-bottom:0;
+}
+@media(max-width:760px){
+  .monthlyCollapseBar{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .monthlyDateHead{
+    gap:10px;
+  }
+  .monthlyCollapseToggle{
+    padding:6px 8px;
   }
 }
