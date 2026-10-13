@@ -45,6 +45,7 @@ function dafYomiHebrew(value:string){
 type RenderOptions = {
   day: CalendarDay;
   notice?: Notice;
+  notices?: Notice[];
   shulName: string;
   width?: number;
   height?: number;
@@ -131,7 +132,13 @@ function drawRow(
   ctx.textAlign = "left";
 }
 
-function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, notice: Notice | undefined, shulName: string) {
+function drawCanonicalScreen(
+  ctx: CanvasRenderingContext2D,
+  day: CalendarDay,
+  notice: Notice | undefined,
+  notices: Notice[] | undefined,
+  shulName: string
+) {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, MAGNET_WIDTH, MAGNET_HEIGHT);
   ctx.fillStyle = "#000";
@@ -221,14 +228,17 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
         { label: "Maariv", time: day.maariv },
       ];
 
-  const hasActualNotice=Boolean(notice?.headline||notice?.details||notice?.location||day.event);
-  const preferredNoticeHeight = notice?.details
-    ? (notice?.location ? 112 : 96)
-    : notice?.location
-      ? 82
-      : hasActualNotice
-        ? 68
-        : 48;
+  const noticeItems=(notices?.length ? notices : notice ? [notice] : []);
+  const fallbackHeadline=!noticeItems.length ? (day.event||"No notices today.") : "";
+  const noticeItemCount=Math.max(1,noticeItems.length);
+
+  // Reserve more room when there are multiple notices/events, then compact
+  // the schedule rows above as necessary. Every notice title remains visible.
+  const preferredNoticeHeight=Math.min(
+    178,
+    38 + noticeItemCount*34 +
+      noticeItems.reduce((sum,item)=>sum+(item.location?10:0)+(item.details?14:0),0)
+  );
 
   const rowsTop = contentTop + 43;
   const rightNoteCount=scheduleRows.filter(row=>Boolean(row.note)).length;
@@ -300,61 +310,85 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
   }
 
   // Notices flow directly beneath whichever main column is longer.
+  // All matching notices/events are rendered; spacing and typography compact
+  // automatically as the list grows so later items are never silently dropped.
   ctx.fillRect(contentLeft, noticeTop, contentWidth, 2);
   const noticeAvailableHeight=Math.max(28,footerTop-noticeTop-2);
-  const compactNotice=noticeAvailableHeight<72;
-  const noticeHeaderSize=compactNotice?12:15;
-  const headlineSize=compactNotice?15:19;
-  const bodySize=compactNotice?10:13;
-  const headlineLineHeight=headlineSize+3;
-  const bodyLineHeight=bodySize+3;
+  const noticeHeaderSize=noticeAvailableHeight<72?11:14;
 
   ctx.font = `900 ${noticeHeaderSize}px Arial, sans-serif`;
-  ctx.fillText("NOTICES", contentLeft, noticeTop + 7);
+  ctx.fillText("NOTICES", contentLeft, noticeTop + 6);
 
-  const headline = notice?.headline || day.event || "No notices today.";
-  const headlineTop=noticeTop+noticeHeaderSize+12;
-  const headlineWidth=notice?.eventTime ? contentWidth-138 : contentWidth;
-  ctx.font = `900 ${headlineSize}px Arial, sans-serif`;
-  const maxHeadlineLines=Math.max(
-    1,
-    Math.min(2,Math.floor((footerTop-headlineTop-6)/headlineLineHeight))
+  const itemsTop=noticeTop+noticeHeaderSize+10;
+  const itemsBottom=footerTop-3;
+  const displayItems=noticeItems.length
+    ? noticeItems
+    : [{
+        headline:fallbackHeadline,
+        eventTime:undefined,
+        location:undefined,
+        details:""
+      }];
+
+  const itemGap=displayItems.length>1?3:0;
+  const usableItemHeight=Math.max(
+    12,
+    itemsBottom-itemsTop-itemGap*Math.max(0,displayItems.length-1)
   );
-  const headlineLines=wrapText(ctx,headline,headlineWidth,maxHeadlineLines);
-  headlineLines.forEach((line,index)=>{
-    ctx.fillText(line,contentLeft,headlineTop+index*headlineLineHeight);
-  });
+  const itemHeight=Math.max(12,usableItemHeight/displayItems.length);
 
-  if (notice?.eventTime) {
-    ctx.textAlign = "right";
-    ctx.font = `900 ${headlineSize}px Arial, sans-serif`;
-    ctx.fillText(clippedText(ctx, notice.eventTime, 120), contentRight, headlineTop);
-    ctx.textAlign = "left";
-  }
+  displayItems.forEach((item,index)=>{
+    const itemTop=itemsTop+index*(itemHeight+itemGap);
+    const remaining=Math.max(10,itemsBottom-itemTop);
+    const thisHeight=Math.min(itemHeight,remaining);
+    const headlineSize=Math.max(9,Math.min(18,Math.floor(thisHeight*0.42)));
+    const bodySize=Math.max(8,Math.min(12,headlineSize-3));
+    const bodyLineHeight=bodySize+2;
+    const timeWidth=item.eventTime?112:0;
+    const headlineWidth=Math.max(90,contentWidth-timeWidth-(timeWidth?12:0));
 
-  let noticeBodyY=headlineTop+headlineLines.length*headlineLineHeight+2;
-
-  if (notice?.location && noticeBodyY+bodyLineHeight<=footerTop-3) {
-    ctx.font = `700 ${bodySize}px Arial, sans-serif`;
+    ctx.font=`900 ${headlineSize}px Arial, sans-serif`;
+    ctx.textAlign="left";
     ctx.fillText(
-      clippedText(ctx, `Location: ${notice.location}`, contentWidth),
+      clippedText(ctx,item.headline||"Notice",headlineWidth),
       contentLeft,
-      noticeBodyY
+      itemTop
     );
-    noticeBodyY += bodyLineHeight;
-  }
 
-  if (notice?.details && noticeBodyY<footerTop-3) {
-    ctx.font = `${bodySize}px Arial, sans-serif`;
-    const detailsLines=Math.max(
-      0,
-      Math.floor((footerTop-noticeBodyY-3)/bodyLineHeight)
-    );
-    const lines = wrapText(ctx, notice.details, contentWidth, detailsLines);
-    lines.forEach((line,index)=>{
-      ctx.fillText(line,contentLeft,noticeBodyY+index*bodyLineHeight);
-    });
-  }
+    if(item.eventTime){
+      ctx.textAlign="right";
+      ctx.font=`900 ${headlineSize}px Arial, sans-serif`;
+      ctx.fillText(clippedText(ctx,item.eventTime,timeWidth),contentRight,itemTop);
+      ctx.textAlign="left";
+    }
+
+    const bodyY=itemTop+headlineSize+3;
+    const bodyRoom=itemTop+thisHeight-bodyY;
+
+    if(bodyRoom>=bodyLineHeight){
+      const bodyParts:string[]=[];
+      if(item.location)bodyParts.push(`Location: ${item.location}`);
+      if(item.details)bodyParts.push(item.details);
+      const bodyText=bodyParts.join(" · ");
+
+      if(bodyText){
+        ctx.font=`${item.location?"700 ":""}${bodySize}px Arial, sans-serif`;
+        const maxBodyLines=Math.max(1,Math.floor(bodyRoom/bodyLineHeight));
+        const lines=wrapText(ctx,bodyText,contentWidth,maxBodyLines);
+        lines.forEach((line,lineIndex)=>{
+          const y=bodyY+lineIndex*bodyLineHeight;
+          if(y+bodySize<=itemsBottom){
+            ctx.fillText(line,contentLeft,y);
+          }
+        });
+      }
+    }
+
+    if(index<displayItems.length-1&&thisHeight>=22){
+      const dividerY=Math.min(itemsBottom,itemTop+thisHeight+1);
+      ctx.fillRect(contentLeft,dividerY,contentWidth,1);
+    }
+  });
 
   ctx.fillRect(18, footerTop, 612, 2);
   ctx.font = "700 12px Arial, sans-serif";
@@ -402,7 +436,7 @@ export function renderMagnetCanvas(canvas: HTMLCanvasElement, options: RenderOpt
   ctx.save();
   ctx.translate(offsetX, offsetY);
   ctx.scale(scale, scale);
-  drawCanonicalScreen(ctx, options.day, options.notice, options.shulName);
+  drawCanonicalScreen(ctx, options.day, options.notice, options.notices, options.shulName);
   ctx.restore();
 
   return canvas;
