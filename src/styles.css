@@ -1421,3 +1421,18 @@ body{color:#172b26}
     grid-template-columns:1fr;
   }
 }
+
+
+/* Calendar scan states */
+.dayCell.today{box-shadow:inset 0 0 0 2px #2f7d6d}
+.dayCell.today.selected{box-shadow:inset 0 0 0 3px #2f7d6d}
+.todayTag,.manualOverrideTag,.specialConfirmedTag{
+  display:inline-block;
+  border-radius:999px;
+  padding:4px 8px;
+  font-size:9px;
+  font-weight:900;
+}
+.todayTag{background:#dff1ea;color:#27594c}
+.manualOverrideTag{background:#fff1d6;color:#6a4a12}
+.specialConfirmedTag{background:#ece8f8;color:#51427d}
