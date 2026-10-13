@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 import type { CalendarDay, Notice } from "../types";
 import { MAGNET_HEIGHT, MAGNET_WIDTH, renderMagnetCanvas } from "../lib/renderMagnet";
 
+const PREVIEW_SCALE=1.5;
+const PREVIEW_WIDTH=Math.round(MAGNET_WIDTH*PREVIEW_SCALE);
+const PREVIEW_HEIGHT=Math.round(MAGNET_HEIGHT*PREVIEW_SCALE);
+
 export default function MagnetPreview({
   day,
   notice,
@@ -21,8 +25,8 @@ export default function MagnetPreview({
       day,
       notice,
       shulName,
-      width: MAGNET_WIDTH,
-      height: MAGNET_HEIGHT,
+      width: PREVIEW_WIDTH,
+      height: PREVIEW_HEIGHT,
     });
   }, [day, notice, shulName]);
 
@@ -41,13 +45,13 @@ export default function MagnetPreview({
           <div className="goalMagnetScreen">
             <canvas
               ref={canvasRef}
-              width={MAGNET_WIDTH}
-              height={MAGNET_HEIGHT}
+              width={PREVIEW_WIDTH}
+              height={PREVIEW_HEIGHT}
               aria-label="Live e-paper screen preview"
             />
           </div>
         </div>
-        <small className="goalMagnetCaption">Concept enclosure · screen content shown at the target 648 × 480 layout</small>
+        <small className="goalMagnetCaption">Concept enclosure · responsive e-paper layout · final native resolution follows the production panel</small>
       </div>
     </div>
   );
