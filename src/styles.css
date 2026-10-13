@@ -2229,3 +2229,19 @@ body{color:#172b26}
     width:100%;
   }
 }
+
+
+/* Clickable Monthly Setup card headers */
+.monthlyDateHead{
+  cursor:pointer;
+}
+.monthlyDateHead:hover{
+  background:rgba(0,0,0,.015);
+}
+.monthlyDateHead:focus-visible{
+  outline:2px solid currentColor;
+  outline-offset:-2px;
+}
+.monthlyCollapseToggle{
+  cursor:pointer;
+}
