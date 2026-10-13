@@ -60,26 +60,46 @@ function clippedText(ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
+  if (maxLines <= 0) return [];
   const words = text.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
+  let consumed = 0;
 
   for (const word of words) {
     const candidate = line ? `${line} ${word}` : word;
     if (ctx.measureText(candidate).width <= maxWidth) {
       line = candidate;
+      consumed += 1;
       continue;
     }
-    if (line) lines.push(line);
+
+    if (!line) {
+      line = clippedText(ctx, word, maxWidth);
+      consumed += 1;
+    }
+
+    lines.push(line);
+    if (lines.length >= maxLines) {
+      line = "";
+      break;
+    }
+
     line = word;
-    if (lines.length >= maxLines - 1) break;
+    consumed += 1;
   }
 
   if (line && lines.length < maxLines) lines.push(line);
-  if (words.length && lines.length === maxLines) {
+
+  if (consumed < words.length && lines.length) {
     const last = lines.length - 1;
-    lines[last] = clippedText(ctx, lines[last], maxWidth);
+    let value = lines[last].replace(/…$/,"");
+    while (value.length > 1 && ctx.measureText(value + "…").width > maxWidth) {
+      value = value.slice(0,-1);
+    }
+    lines[last] = value + "…";
   }
+
   return lines;
 }
 
@@ -94,15 +114,20 @@ function drawRow(
   x: number,
   y: number,
   width: number,
-  labelWidth = 150
+  labelWidth = 150,
+  fontSize = 18
 ) {
   ctx.textAlign = "left";
-  ctx.font = "700 18px Arial, sans-serif";
-  ctx.fillText(clippedText(ctx, label, Math.min(labelWidth, width - 80)), x, y);
+  ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+  ctx.fillText(
+    clippedText(ctx, label, Math.max(40,Math.min(labelWidth, width - Math.max(62,fontSize*4.2)))),
+    x,
+    y
+  );
 
   ctx.textAlign = "right";
-  ctx.font = "700 18px Arial, sans-serif";
-  ctx.fillText(clippedText(ctx, time || "", 105), x + width, y);
+  ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+  ctx.fillText(clippedText(ctx, time || "", Math.max(62,fontSize*5.8)), x + width, y);
   ctx.textAlign = "left";
 }
 
@@ -172,13 +197,10 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
     contentTop += boxHeight + 14;
   }
 
-  const noticeTop = 378;
   const footerTop = 452;
-  const splitBottom = noticeTop - 10;
 
   // Main content is intentionally 40:60 — Zmanim gets 40% and the
-  // shul schedule gets 60%. The shul side needs more room for special
-  // events, multiple minyanim, and longer service labels.
+  // shul schedule gets 60%.
   const contentLeft = 18;
   const contentRight = 630;
   const contentWidth = contentRight - contentLeft;
@@ -190,6 +212,56 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
   const leftWidth = dividerX - leftX - columnGap;
   const rightWidth = contentRight - rightX;
 
+  const zmanimRows = (day.zmanimRows || []).slice(0,7);
+  const scheduleRows = day.shulScheduleRows?.length
+    ? day.shulScheduleRows.slice(0,6)
+    : [
+        { label: "Shacharis", time: day.shacharis },
+        { label: "Mincha", time: day.mincha },
+        { label: "Maariv", time: day.maariv },
+      ];
+
+  const hasActualNotice=Boolean(notice?.headline||notice?.details||notice?.location||day.event);
+  const preferredNoticeHeight = notice?.details
+    ? (notice?.location ? 112 : 96)
+    : notice?.location
+      ? 82
+      : hasActualNotice
+        ? 68
+        : 48;
+
+  const rowsTop = contentTop + 43;
+  const rightNoteCount=scheduleRows.filter(row=>Boolean(row.note)).length;
+  const leftUnits=Math.max(1,zmanimRows.length);
+  const rightUnits=Math.max(1,scheduleRows.length + rightNoteCount*0.48);
+  const targetMainBottom=footerTop-preferredNoticeHeight-8;
+  const availableRowsHeight=Math.max(60,targetMainBottom-rowsTop);
+  const rowStep=Math.max(17,Math.min(31,Math.floor(
+    availableRowsHeight/Math.max(leftUnits,rightUnits)
+  )));
+  const rowFontSize=Math.max(12,Math.min(18,rowStep-7));
+  const noteFontSize=Math.max(9,Math.min(12,rowFontSize-3));
+  const noteLineHeight=noteFontSize+3;
+
+  // Calculate where each column will finish before drawing the divider.
+  const leftBottom=zmanimRows.length
+    ? rowsTop+(zmanimRows.length-1)*rowStep+rowFontSize+3
+    : rowsTop+18;
+
+  let measuredRightY=rowsTop;
+  let rightBottom=rowsTop+18;
+  for(const row of scheduleRows){
+    rightBottom=measuredRightY+rowFontSize+3;
+    if(row.note)rightBottom+=noteLineHeight;
+    measuredRightY+=rowStep+(row.note?noteLineHeight:0);
+  }
+
+  const noticeTop=Math.min(
+    Math.max(leftBottom,rightBottom)+8,
+    footerTop-42
+  );
+  const splitBottom=Math.max(contentTop+32,noticeTop-8);
+
   ctx.font = "900 19px Arial, sans-serif";
   ctx.fillText("ZMANIM", leftX, contentTop);
   ctx.fillText(
@@ -198,67 +270,90 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
     contentTop
   );
 
-  ctx.fillRect(dividerX, contentTop, 2, splitBottom - contentTop);
+  ctx.fillRect(dividerX, contentTop, 2, splitBottom-contentTop);
   ctx.fillRect(contentLeft, contentTop + 30, contentWidth, 2);
 
-  let leftY = contentTop + 43;
-  for (const row of (day.zmanimRows || []).slice(0, 7)) {
-    drawRow(ctx, row.label, row.time, leftX, leftY, leftWidth, 120);
-    leftY += 31;
+  let leftY = rowsTop;
+  for (const row of zmanimRows) {
+    drawRow(ctx, row.label, row.time, leftX, leftY, leftWidth, 120, rowFontSize);
+    leftY += rowStep;
   }
 
-  if (!(day.zmanimRows || []).length) {
-    ctx.font = "700 16px Arial, sans-serif";
+  if (!zmanimRows.length) {
+    ctx.font = `700 ${Math.max(12,rowFontSize-1)}px Arial, sans-serif`;
     ctx.fillText("Zmanim unavailable", leftX, leftY);
   }
 
-  const scheduleRows = day.shulScheduleRows?.length
-    ? day.shulScheduleRows
-    : [
-        { label: "Shacharis", time: day.shacharis },
-        { label: "Mincha", time: day.mincha },
-        { label: "Maariv", time: day.maariv },
-      ];
-
-  let rightY = contentTop + 43;
-  for (const row of scheduleRows.slice(0, 6)) {
-    drawRow(ctx, row.label, row.time, rightX, rightY, rightWidth, 205);
+  let rightY = rowsTop;
+  for (const row of scheduleRows) {
+    drawRow(ctx, row.label, row.time, rightX, rightY, rightWidth, 205, rowFontSize);
     if (row.note) {
-      ctx.font = "12px Arial, sans-serif";
-      ctx.fillText(clippedText(ctx, row.note, rightWidth - 8), rightX, rightY + 20);
-      rightY += 15;
+      ctx.font = `${noteFontSize}px Arial, sans-serif`;
+      ctx.fillText(
+        clippedText(ctx, row.note, rightWidth - 8),
+        rightX,
+        rightY + rowFontSize + 2
+      );
+      rightY += noteLineHeight;
     }
-    rightY += 31;
+    rightY += rowStep;
   }
 
-  ctx.fillRect(18, noticeTop, 612, 2);
-  ctx.font = "900 17px Arial, sans-serif";
-  ctx.fillText("NOTICES", 18, noticeTop + 10);
+  // Notices flow directly beneath whichever main column is longer.
+  ctx.fillRect(contentLeft, noticeTop, contentWidth, 2);
+  const noticeAvailableHeight=Math.max(28,footerTop-noticeTop-2);
+  const compactNotice=noticeAvailableHeight<72;
+  const noticeHeaderSize=compactNotice?12:15;
+  const headlineSize=compactNotice?15:19;
+  const bodySize=compactNotice?10:13;
+  const headlineLineHeight=headlineSize+3;
+  const bodyLineHeight=bodySize+3;
+
+  ctx.font = `900 ${noticeHeaderSize}px Arial, sans-serif`;
+  ctx.fillText("NOTICES", contentLeft, noticeTop + 7);
 
   const headline = notice?.headline || day.event || "No notices today.";
-  ctx.font = "900 21px Arial, sans-serif";
-  ctx.fillText(clippedText(ctx, headline, notice?.eventTime ? 455 : 590), 18, noticeTop + 34);
+  const headlineTop=noticeTop+noticeHeaderSize+12;
+  const headlineWidth=notice?.eventTime ? contentWidth-138 : contentWidth;
+  ctx.font = `900 ${headlineSize}px Arial, sans-serif`;
+  const maxHeadlineLines=Math.max(
+    1,
+    Math.min(2,Math.floor((footerTop-headlineTop-6)/headlineLineHeight))
+  );
+  const headlineLines=wrapText(ctx,headline,headlineWidth,maxHeadlineLines);
+  headlineLines.forEach((line,index)=>{
+    ctx.fillText(line,contentLeft,headlineTop+index*headlineLineHeight);
+  });
 
   if (notice?.eventTime) {
     ctx.textAlign = "right";
-    ctx.font = "900 21px Arial, sans-serif";
-    ctx.fillText(clippedText(ctx, notice.eventTime, 120), 630, noticeTop + 34);
+    ctx.font = `900 ${headlineSize}px Arial, sans-serif`;
+    ctx.fillText(clippedText(ctx, notice.eventTime, 120), contentRight, headlineTop);
     ctx.textAlign = "left";
   }
 
-  let noticeBodyY = noticeTop + 60;
+  let noticeBodyY=headlineTop+headlineLines.length*headlineLineHeight+2;
 
-  if (notice?.location) {
-    ctx.font = "700 14px Arial, sans-serif";
-    ctx.fillText(clippedText(ctx, `Location: ${notice.location}`, 590), 18, noticeBodyY);
-    noticeBodyY += 17;
+  if (notice?.location && noticeBodyY+bodyLineHeight<=footerTop-3) {
+    ctx.font = `700 ${bodySize}px Arial, sans-serif`;
+    ctx.fillText(
+      clippedText(ctx, `Location: ${notice.location}`, contentWidth),
+      contentLeft,
+      noticeBodyY
+    );
+    noticeBodyY += bodyLineHeight;
   }
 
-  if (notice?.details) {
-    ctx.font = "14px Arial, sans-serif";
-    const maxLines = notice?.location ? 1 : 2;
-    const lines = wrapText(ctx, notice.details, 590, maxLines);
-    lines.forEach((line, index) => ctx.fillText(line, 18, noticeBodyY + index * 17));
+  if (notice?.details && noticeBodyY<footerTop-3) {
+    ctx.font = `${bodySize}px Arial, sans-serif`;
+    const detailsLines=Math.max(
+      0,
+      Math.floor((footerTop-noticeBodyY-3)/bodyLineHeight)
+    );
+    const lines = wrapText(ctx, notice.details, contentWidth, detailsLines);
+    lines.forEach((line,index)=>{
+      ctx.fillText(line,contentLeft,noticeBodyY+index*bodyLineHeight);
+    });
   }
 
   ctx.fillRect(18, footerTop, 612, 2);
