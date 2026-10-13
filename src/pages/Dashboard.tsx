@@ -37,14 +37,15 @@ export default function Dashboard({
   const dateLabel=new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}).format(now);
   const [publishing,setPublishing]=useState(false);
   const [publishStatus,setPublishStatus]=useState("");
-  const liveNotice=notices.find(n=>n.status==="live");
+  const liveNotices=notices.filter(n=>n.status==="live");
+  const liveNotice=liveNotices[0];
 
   async function publishToBadger(){
     if(!shulId||publishing)return;
     setPublishing(true);
     setPublishStatus("");
     try{
-      const imageBase64=magnetPngBase64({day:previewDay,notice:liveNotice,shulName,width:264,height:176});
+      const imageBase64=magnetPngBase64({day:previewDay,notices:liveNotices,shulName,width:264,height:176});
       const {error}=await supabase.functions.invoke("publish-badger-screen",{
         body:{shul_id:shulId,image_base64:imageBase64}
       });
@@ -132,7 +133,7 @@ export default function Dashboard({
       </div>
 
       <div className="twoCol">
-        <MagnetPreview day={previewDay} notice={liveNotice} shulName={shulName} />
+        <MagnetPreview day={previewDay} notices={liveNotices} shulName={shulName} />
         <div className="panel">
           <div className="panelHead">
             <div><span className="eyebrow">Today</span><h2>Today’s Schedule</h2></div>
