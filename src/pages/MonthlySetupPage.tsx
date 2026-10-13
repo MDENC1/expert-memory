@@ -216,6 +216,16 @@ function monthlyIsFast(title:string){
   return /tzom gedalia|asara b|tevet|taanit esther|fast of esther|17th of tammuz|tzom tammuz|tisha b|tish'a b|yom kippur/.test(t);
 }
 
+function monthlyIsCholHamoedEvent(event:HebcalSpecialEvent){
+  if(event.is_chol_hamoed)return true;
+  const normalized=(event.title||"")
+    .toLowerCase()
+    .replace(/[’‘”“"'״׳]/g,"")
+    .replace(/[^a-z0-9]+/g," ")
+    .trim();
+  return /chol ha moed|chol hamoed|ch m|chm/.test(normalized);
+}
+
 function formatMinutes(total:number) {
   const normalized=((total%1440)+1440)%1440;
   const h24=Math.floor(normalized/60);
@@ -568,6 +578,7 @@ export default function MonthlySetupPage({
 
   const [values,setValues] = useState<SpecialValues>({});
   const [monthlyCustomEvents,setMonthlyCustomEvents] = useState<Record<string,MonthlyCustomEvent[]>>({});
+  const [collapsedDates,setCollapsedDates] = useState<Record<string,boolean>>({});
 
   useEffect(()=>{
     if(!focusGroup||!shulId){
@@ -990,7 +1001,7 @@ export default function MonthlySetupPage({
         existing.additional.push(...additions.filter(item=>!seen.has(item.key)));
         if(event.blocks_regular_schedule)existing.replaceSchedule=true;
         if(event.blocks_regular_schedule)existing.title=title;
-        if(event.is_chol_hamoed)existing.isCholHamoed=true;
+        if(monthlyIsCholHamoedEvent(event))existing.isCholHamoed=true;
       }else{
         byDate.set(event.date,{
           date:event.date,
@@ -998,7 +1009,7 @@ export default function MonthlySetupPage({
           title,
           replaceSchedule:!lower.includes("selich"),
           additional:additions,
-          isCholHamoed:Boolean(event.is_chol_hamoed)
+          isCholHamoed:monthlyIsCholHamoedEvent(event)
         });
       }
     }
@@ -1065,6 +1076,18 @@ export default function MonthlySetupPage({
   };
 
   const customEventsForDate=(date:string)=>monthlyCustomEvents[date]||[];
+
+  const toggleDateCollapsed=(date:string)=>{
+    setCollapsedDates(current=>({...current,[date]:!current[date]}));
+  };
+
+  const collapseAllDates=()=>{
+    setCollapsedDates(Object.fromEntries(monthlyCards.map(card=>[card.date,true])));
+  };
+
+  const expandAllDates=()=>{
+    setCollapsedDates({});
+  };
 
   const addMonthlyCustomEvent=(date:string)=>{
     setMonthlyCustomEvents(current=>({
