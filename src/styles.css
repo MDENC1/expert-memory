@@ -1554,3 +1554,49 @@ body{color:#172b26}
 
 .recurrenceRange{font-weight:700;color:#476159}
 .recurringDot{display:inline-block;margin-right:4px;font-weight:950;color:#31566b}
+
+
+/* Selected-day notice editing */
+.selectedDayNotices{
+  display:grid;
+  gap:8px;
+  margin-top:16px;
+  padding-top:14px;
+  border-top:1px solid #e4ece9;
+}
+.selectedDayNoticesHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.selectedDayNoticesHead strong{font-size:11px;color:#536b63}
+.selectedDayNoticeCard{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:start;
+  padding:11px;
+  border:1px solid #d9e7e2;
+  border-radius:11px;
+  background:#fbfdfc;
+}
+.selectedDayNoticeBody{display:grid;gap:4px;min-width:0}
+.selectedDayNoticeTop{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.selectedDayNoticeBody>strong{font-size:13px;color:#20312d}
+.selectedDayNoticeBody p{margin:0;font-size:11px;line-height:1.4;color:#526a62}
+.selectedDayNoticeBody small{font-size:9px;color:#6a7e77}
+.selectedDayNoticeTime{font-size:12px;font-weight:900;color:#31566b}
+.selectedDayRecurring{
+  font-size:9px;
+  font-weight:850;
+  color:#31566b;
+}
+.selectedDayNoticeEdit{
+  padding:7px 10px;
+  font-size:11px;
+}
+@media(max-width:520px){
+  .selectedDayNoticeCard{grid-template-columns:1fr}
+  .selectedDayNoticeEdit{width:100%}
+}
