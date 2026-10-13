@@ -9,11 +9,13 @@ const PREVIEW_HEIGHT=Math.round(MAGNET_HEIGHT*PREVIEW_SCALE);
 export default function MagnetPreview({
   day,
   notice,
+  notices,
   shulName = "SHUL",
   fit = false,
 }: {
   day: CalendarDay;
   notice?: Notice;
+  notices?: Notice[];
   shulName?: string;
   fit?: boolean;
 }) {
@@ -24,11 +26,12 @@ export default function MagnetPreview({
     renderMagnetCanvas(canvasRef.current, {
       day,
       notice,
+      notices,
       shulName,
       width: PREVIEW_WIDTH,
       height: PREVIEW_HEIGHT,
     });
-  }, [day, notice, shulName]);
+  }, [day, notice, notices, shulName]);
 
   return (
     <div className={fit ? "panel previewPanel fitPreviewPanel" : "panel previewPanel"}>
