@@ -231,10 +231,19 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
     ctx.textAlign = "left";
   }
 
+  let noticeBodyY = noticeTop + 60;
+
+  if (notice?.location) {
+    ctx.font = "700 14px Arial, sans-serif";
+    ctx.fillText(clippedText(ctx, `Location: ${notice.location}`, 590), 18, noticeBodyY);
+    noticeBodyY += 17;
+  }
+
   if (notice?.details) {
     ctx.font = "14px Arial, sans-serif";
-    const lines = wrapText(ctx, notice.details, 590, 2);
-    lines.forEach((line, index) => ctx.fillText(line, 18, noticeTop + 60 + index * 17));
+    const maxLines = notice?.location ? 1 : 2;
+    const lines = wrapText(ctx, notice.details, 590, maxLines);
+    lines.forEach((line, index) => ctx.fillText(line, 18, noticeBodyY + index * 17));
   }
 
   ctx.fillRect(18, footerTop, 612, 2);
