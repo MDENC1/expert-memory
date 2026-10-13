@@ -3,6 +3,7 @@ import type { CalendarDay } from "../types";
 import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import { jewishMonthTemplates } from "../data/mock";
 import { supabase } from "../lib/supabase";
+import { linkedSpecialEventsForDate } from "../lib/specialEventCatalog";
 
 type SpecialValues = Record<string,string[]>;
 type FastOverride = {start?:string;end?:string};
@@ -1105,14 +1106,15 @@ export default function MonthlySetupPage({
     setCollapsedDates({});
   };
 
-  const addMonthlyCustomEvent=(date:string)=>{
+  const addMonthlyCustomEvent=(date:string,isCholHamoed=false)=>{
+    const linked=linkedSpecialEventsForDate(date,{isCholHamoed});
     setMonthlyCustomEvents(current=>({
       ...current,
       [date]:[
         ...(current[date]||[]),
         {
           id:`${date}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-          label:month==="Tishrei"?"Simchas Beis Hashoeva":"",
+          label:linked[0]?.label||"",
           time:""
         }
       ]
@@ -1622,7 +1624,6 @@ export default function MonthlySetupPage({
                               <label>
                                 <span>Event</span>
                                 <input
-                                  list={month==="Tishrei"?"tishrei-special-event-suggestions":undefined}
                                   value={event.label}
                                   placeholder="Special event"
                                   onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"label",e.target.value)}
@@ -1651,7 +1652,7 @@ export default function MonthlySetupPage({
                       <button
                         type="button"
                         className="secondary monthlyAddTime monthlyAddSpecialEvent"
-                        onClick={()=>addMonthlyCustomEvent(card.date)}
+                        onClick={()=>addMonthlyCustomEvent(card.date,card.isCholHamoed)}
                       >
                         + Add Special Event
                       </button>
@@ -1713,12 +1714,6 @@ export default function MonthlySetupPage({
               );
             })}
           </div>
-        )}
-
-        {month==="Tishrei"&&(
-          <datalist id="tishrei-special-event-suggestions">
-            <option value="Simchas Beis Hashoeva" />
-          </datalist>
         )}
 
         <div className="monthlySetupActions monthlySetupSaveBar">
