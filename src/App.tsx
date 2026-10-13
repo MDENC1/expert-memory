@@ -462,6 +462,7 @@ export default function App() {
   const [specialCalendarEvents,setSpecialCalendarEvents] = useState<HebcalSpecialEvent[]>([]);
   const [specialSetupAlerts,setSpecialSetupAlerts] = useState<SpecialSetupAlert[]>([]);
   const [specialStatusVersion,setSpecialStatusVersion] = useState(0);
+  const [todayDafYomi,setTodayDafYomi] = useState("");
   const [calendarFocusDate,setCalendarFocusDate] = useState("");
   const [monthlyFocusGroup,setMonthlyFocusGroup] = useState("");
   const [pushesUsed,setPushesUsed] = useState(0);
@@ -491,8 +492,8 @@ export default function App() {
       shabbosEndMinutes,
       todayOverrides,
       todaySpecialRequirement
-    ),zmanimRows:liveZmanimRows}),
-    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes,todayOverrides,todaySpecialRequirement,liveZmanimRows]
+    ),zmanimRows:liveZmanimRows,dafYomi:todayDafYomi}),
+    [scheduleEntries,specialDay,specialEntries,liveZmanim,zmanDefaults,shabbosEndMinutes,todayOverrides,todaySpecialRequirement,liveZmanimRows,todayDafYomi]
   );
 
   useEffect(()=>{
@@ -593,11 +594,13 @@ export default function App() {
       if(calendarError||!calendarData?.success){
         setSpecialCalendarEvents([]);
         setSpecialSetupAlerts([]);
+        setTodayDafYomi("");
         return;
       }
 
       const events=(calendarData.events||[]) as HebcalSpecialEvent[];
       setSpecialCalendarEvents(events);
+      setTodayDafYomi(String(calendarData.daf_yomi?.[today]||""));
 
       const [daysRes,entriesRes,overridesRes]=await Promise.all([
         supabase.from("special_schedule_days")
