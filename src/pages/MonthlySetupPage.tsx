@@ -1309,7 +1309,7 @@ export default function MonthlySetupPage({
             title:label,
             event_time:customEvent.time,
             approximate:false,
-            note:null,
+            note:"monthly_custom_event",
             sort_order:additionalSort
           });
           additionalSort+=10;
