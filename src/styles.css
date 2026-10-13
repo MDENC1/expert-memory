@@ -1994,3 +1994,44 @@ body{color:#172b26}
   }
   .monthlyServiceRow>strong{font-size:15px}
 }
+
+
+/* Monthly Setup multi-time controls */
+.monthlySpecialTimes{display:grid;gap:7px}
+.monthlySpecialTimeRow{
+  display:flex;
+  gap:7px;
+  align-items:center;
+}
+.monthlySpecialTimeRow input[type="time"]{
+  flex:1;
+  min-width:0;
+}
+.monthlyTimeActions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.monthlyTimeActions small{color:#778681;font-size:10px}
+.monthlyAddTime,
+.monthlyRemoveTime{
+  padding:6px 9px;
+  min-height:32px;
+  font-size:10px;
+}
+.monthlyRemoveTime{white-space:nowrap}
+.monthlyAddAdditionalTime{justify-self:start}
+.monthlyHebrewDate[dir="rtl"] strong{
+  font-family:Arial,"Noto Sans Hebrew",sans-serif;
+  letter-spacing:0;
+}
+.monthlyHebrewDate[dir="rtl"] span{
+  font-family:Arial,"Noto Sans Hebrew",sans-serif;
+  font-size:12px;
+}
+@media(max-width:760px){
+  .monthlySpecialTimeRow{align-items:stretch}
+  .monthlyTimeActions{align-items:flex-start}
+}
