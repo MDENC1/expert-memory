@@ -1478,7 +1478,18 @@ export default function MonthlySetupPage({
 
               return (
                 <section className="monthlyDateCard" key={card.date}>
-                  <div className="monthlyDateHead">
+                  <div
+                    className="monthlyDateHead"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={!isCollapsed}
+                    onClick={()=>toggleDateCollapsed(card.date)}
+                    onKeyDown={e=>{
+                      if(e.key!=="Enter"&&e.key!==" ")return;
+                      e.preventDefault();
+                      toggleDateCollapsed(card.date);
+                    }}
+                  >
                     <div className="monthlyHebrewDate" dir="rtl">
                       <strong>{monthlyHebrewDayText(card.hebrewDay)}</strong>
                       <span>{monthlyHebrewMonthText(month)}</span>
@@ -1497,7 +1508,10 @@ export default function MonthlySetupPage({
                     <button
                       type="button"
                       className="secondary monthlyCollapseToggle"
-                      onClick={()=>toggleDateCollapsed(card.date)}
+                      onClick={e=>{
+                        e.stopPropagation();
+                        toggleDateCollapsed(card.date);
+                      }}
                       aria-expanded={!isCollapsed}
                     >
                       {isCollapsed?"Expand":"Collapse"}
