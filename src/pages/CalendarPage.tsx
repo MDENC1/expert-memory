@@ -507,10 +507,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       .replace(/\./g,"")
       .replace(/\s+/g,"");
 
-    const suffix=clean.match(/(AM|PM)$/)?.[1];
-    if(!suffix)return "";
+    const suffixMatch=clean.match(/(AM|PM|A|P)$/);
+    if(!suffixMatch)return "";
+    const suffix=suffixMatch[1]==="A"?"AM":suffixMatch[1]==="P"?"PM":suffixMatch[1];
 
-    const numeric=clean.slice(0,-suffix.length);
+    const numeric=clean.slice(0,-suffixMatch[1].length);
     let hour:number;
     let minute:number;
 
@@ -1180,7 +1181,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       details:newDetails.trim()||null,
       display_start:date,
       display_end:date,
-      event_time:(newType==="Event" || newType==="Schedule Change") && newTime ? newTime : null,
+      event_time:(newType==="Event" || newType==="Schedule Change") && newTime ? (displayTimeTo24(newTime)||null) : null,
       recurring:false,
       active:true,
       priority_level:2
@@ -1307,7 +1308,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                         type="text"
                         inputMode="text"
                         value={r.timeText}
-                        placeholder="6:45 AM"
+                        placeholder="725pm"
+                        title="Type 725pm and press Enter for 7:25 PM"
                         aria-label={`${r.label} time`}
                         onFocus={e=>e.currentTarget.select()}
                         onChange={e=>setEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:e.target.value}:row))}
@@ -1370,7 +1372,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                         type="text"
                         inputMode="text"
                         value={r.timeText}
-                        placeholder={r.mixed?"Mixed":"6:45 PM"}
+                        placeholder={r.mixed?"Mixed":"725pm"}
+                        title="Type 725pm and press Enter for 7:25 PM"
                         aria-label={`${r.label} time for selected days`}
                         onFocus={e=>e.currentTarget.select()}
                         onChange={e=>setBulkEditRows(rows=>rows.map((row,index)=>index===i?{...row,timeText:e.target.value}:row))}
@@ -1419,15 +1422,69 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       </div>
 
       {showAdd && selected.length>0 && (
-        <div className="panel calendarAddPanel">
-          <div className="panelHead"><div><span className="eyebrow">Add to calendar</span><h2>{selected.length===1?"This day":`${selected.length} selected days`}</h2></div><button className="secondary" onClick={()=>setShowAdd(false)}>Close</button></div>
-          <div className="formGrid">
-            <label>Type<select value={newType} onChange={e=>setNewType(e.target.value as NoticeType)}><option>Event</option><option>Schedule Change</option><option>General Notice</option><option>Sponsorship</option><option>Yahrtzeit</option></select></label>
-            {(newType==="Event" || newType==="Schedule Change") && <label>Time<input type="time" value={newTime} onChange={e=>setNewTime(e.target.value)} /></label>}
+        <div className="calendarModalBackdrop" onMouseDown={()=>setShowAdd(false)}>
+          <div
+            className="calendarModal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add event or notice"
+            onMouseDown={e=>e.stopPropagation()}
+          >
+            <div className="panelHead calendarModalHead">
+              <div>
+                <span className="eyebrow">Add Event / Notice</span>
+                <h2>
+                  {selected.length===1
+                    ? new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selected[0]}T12:00:00`))
+                    : `${selected.length} selected days`}
+                </h2>
+              </div>
+              <button className="secondary" onClick={()=>setShowAdd(false)}>Close</button>
+            </div>
+
+            <div className="formGrid">
+              <label>
+                Type
+                <select value={newType} onChange={e=>setNewType(e.target.value as NoticeType)}>
+                  <option>Event</option>
+                  <option>Schedule Change</option>
+                  <option>General Notice</option>
+                  <option>Sponsorship</option>
+                  <option>Yahrtzeit</option>
+                </select>
+              </label>
+              {(newType==="Event" || newType==="Schedule Change") && (
+                <label>
+                  Time
+                  <input
+                    type="text"
+                    inputMode="text"
+                    value={newTime}
+                    onChange={e=>setNewTime(e.target.value)}
+                    onBlur={e=>setNewTime(normalizeDisplayTime(e.currentTarget.value))}
+                    placeholder="725pm"
+                  />
+                  <small>Type 725pm → 7:25 PM</small>
+                </label>
+              )}
+            </div>
+
+            <label className="calendarModalField">
+              Headline
+              <input autoFocus value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="e.g. Daf Yomi Shiur" />
+            </label>
+            <label className="calendarModalField">
+              Details
+              <textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="Optional details" />
+            </label>
+
+            <div className="formActions calendarModalActions">
+              <button className="secondary" onClick={()=>setShowAdd(false)}>Cancel</button>
+              <button className="primary" onClick={addToSelectedDates} disabled={!newHeadline.trim()}>
+                Add to Selected Date{selected.length===1?"":"s"}
+              </button>
+            </div>
           </div>
-          <label>Headline<input value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="e.g. Daf Yomi Shiur" /></label>
-          <label>Details<textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="Optional details" /></label>
-          <div className="formActions"><button className="primary" onClick={addToSelectedDates}>Add to Selected Date{selected.length===1?"":"s"}</button></div>
         </div>
       )}
     </>
