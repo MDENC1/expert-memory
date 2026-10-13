@@ -272,6 +272,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [newLinkedSpecialEventKey,setNewLinkedSpecialEventKey] = useState("");
   const [newHeadline,setNewHeadline] = useState("");
   const [newDetails,setNewDetails] = useState("");
+  const [newLocation,setNewLocation] = useState("");
   const [newTime,setNewTime] = useState("");
   const [newStartAt,setNewStartAt] = useState("");
   const [newEndAt,setNewEndAt] = useState("");
@@ -1262,6 +1263,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setNewLinkedSpecialEventKey("");
     setNewHeadline("");
     setNewDetails("");
+    setNewLocation("");
     setNewTime("");
     setNewStartAt(sorted[0]);
     setNewEndAt(sorted[sorted.length-1]);
@@ -1279,6 +1281,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setNewType(notice.type);
     setNewHeadline(notice.headline);
     setNewDetails(notice.details);
+    setNewLocation(notice.location||"");
     setNewTime(notice.eventTime||"");
     setNewStartAt(notice.startAt);
     setNewEndAt(notice.endAt);
@@ -1341,6 +1344,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const deleteEditedNotice=async(scope:"occurrence"|"series")=>{
     if(!editingNoticeId||!editingNotice)return;
+    if(editingNotice.linkedSpecialEventKey){
+      setError("Remove this linked special event from Monthly Setup.");
+      setShowDeleteConfirm(false);
+      return;
+    }
     setDeletingContent(true);
     setError("");
 
@@ -1416,10 +1424,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     if(editingNoticeId){
       const existing=notices.find(notice=>notice.id===editingNoticeId);
-      const updatePayload={
+      const standardUpdatePayload={
         content_type:newType,
         title:newHeadline.trim(),
         details:newDetails.trim()||null,
+        location:newLocation.trim()||null,
         display_start:newStartAt||(existing?.startAt||selected[0]),
         display_end:newEndAt||(existing?.endAt||selected[0]),
         event_time:eventTime,
@@ -1431,10 +1440,16 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         updated_at:new Date().toISOString(),
         ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
       };
+      const linkedUpdatePayload={
+        details:newDetails.trim()||null,
+        location:newLocation.trim()||null,
+        updated_at:new Date().toISOString(),
+        ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
+      };
 
       const {data,error}=await supabase
         .from("notices_events")
-        .update(updatePayload)
+        .update(existing?.linkedSpecialEventKey?linkedUpdatePayload:standardUpdatePayload)
         .eq("id",editingNoticeId)
         .eq("shul_id",shulId)
         .select("*")
@@ -1451,6 +1466,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         type:data.content_type,
         headline:data.title,
         details:data.details||"",
+        location:data.location||undefined,
+        linkedSpecialEventKey:data.linked_special_event_key||undefined,
         startAt:data.display_start,
         endAt:data.display_end,
         eventTime:data.event_time?prettyTime(data.event_time):undefined,
@@ -1475,6 +1492,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             content_type:newType,
             title:newHeadline.trim(),
             details:newDetails.trim()||null,
+            location:newLocation.trim()||null,
             display_start:newStartAt||selected[0],
             display_end:newEndAt||selected[0],
             event_time:eventTime,
@@ -1491,6 +1509,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             content_type:newType,
             title:newHeadline.trim(),
             details:newDetails.trim()||null,
+            location:newLocation.trim()||null,
             display_start:date,
             display_end:date,
             event_time:eventTime,
@@ -1515,6 +1534,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         type:row.content_type,
         headline:row.title,
         details:row.details||"",
+        location:row.location||undefined,
+        linkedSpecialEventKey:row.linked_special_event_key||undefined,
         startAt:row.display_start,
         endAt:row.display_end,
         eventTime:row.event_time?prettyTime(row.event_time):undefined,
@@ -1536,6 +1557,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     setNewHeadline("");
     setNewDetails("");
+    setNewLocation("");
     setNewTime("");
     setNewRecurring(false);
     setNewWeekdays([]);
@@ -1707,7 +1729,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                           </div>
                           <strong>{notice.headline}</strong>
                           {notice.eventTime&&<span className="selectedDayNoticeTime">{notice.eventTime}</span>}
+                          {notice.location&&<span className="selectedDayNoticeLocation">Location: {notice.location}</span>}
                           {notice.details&&<p>{notice.details}</p>}
+                          {notice.linkedSpecialEventKey&&<small>Linked to Monthly Setup</small>}
                           {notice.recurrence?.enabled&&(
                             <small>Applies {notice.startAt} → {notice.endAt}</small>
                           )}
@@ -1855,6 +1879,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                         {notice.eventTime&&<b>{notice.eventTime} · </b>}
                         {notice.headline}
                         {notice.recurrence?.enabled&&<span> ↻</span>}
+                        {notice.location&&<small> · {notice.location}</small>}
                       </div>
                     ))}
                   </div>
@@ -1895,6 +1920,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               <label>
                 Type
                 <select
+                  disabled={Boolean(editingNotice?.linkedSpecialEventKey)}
                   value={newLinkedSpecialEventKey?`special:${newLinkedSpecialEventKey}`:`type:${newType}`}
                   onChange={e=>selectContentChoice(e.target.value)}
                 >
@@ -1922,6 +1948,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 <label>
                   Event / schedule time
                   <input
+                    disabled={Boolean(editingNotice?.linkedSpecialEventKey)}
                     type="text"
                     inputMode="text"
                     value={newTime}
@@ -1937,15 +1964,22 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 <>
                   <label>
                     Display start date
-                    <input type="date" value={newStartAt} onChange={e=>setNewStartAt(e.target.value)} />
+                    <input disabled={Boolean(editingNotice?.linkedSpecialEventKey)} type="date" value={newStartAt} onChange={e=>setNewStartAt(e.target.value)} />
                   </label>
                   <label>
                     Display end date
-                    <input type="date" value={newEndAt} onChange={e=>setNewEndAt(e.target.value)} />
+                    <input disabled={Boolean(editingNotice?.linkedSpecialEventKey)} type="date" value={newEndAt} onChange={e=>setNewEndAt(e.target.value)} />
                   </label>
                 </>
               )}
             </div>
+
+            {editingNotice?.linkedSpecialEventKey&&(
+              <div className="linkedSpecialEventNotice">
+                <strong>Linked to Monthly Setup</strong>
+                <span>Name, date and time come from Monthly Setup. Add location and details here.</span>
+              </div>
+            )}
 
             {!editingNoticeId&&selected.length>1&&(
               <div className="calendarSelectedDatesNote">
@@ -1954,15 +1988,19 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             )}
 
             <label className="calendarModalField">
+              Location
+              <input value={newLocation} onChange={e=>setNewLocation(e.target.value)} placeholder="Main ballroom, social hall, address…" />
+            </label>
+            <label className="calendarModalField">
               Headline
-              <input autoFocus value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="Short headline" />
+              <input disabled={Boolean(editingNotice?.linkedSpecialEventKey)} autoFocus value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="Short headline" />
             </label>
             <label className="calendarModalField">
               Details
               <textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="What should members see?" />
             </label>
 
-            {canNewContentRecur&&(
+            {canNewContentRecur&&!editingNotice?.linkedSpecialEventKey&&(
               <div className="recurrenceBox calendarRecurrenceBox">
                 <label className="checkRow">
                   <input
@@ -2076,7 +2114,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             )}
 
             <div className="formActions calendarModalActions">
-              {editingNoticeId&&(
+              {editingNoticeId&&!editingNotice?.linkedSpecialEventKey&&(
                 <button
                   type="button"
                   className="dangerButton"
