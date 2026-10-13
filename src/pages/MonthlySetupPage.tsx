@@ -381,6 +381,74 @@ function focusedRegularRows(
     .filter(row=>row.label);
 }
 
+function monthlyRegularServiceRows(
+  date:string,
+  service:MonthlyService,
+  schedule:LiveScheduleEntry[],
+  zmanim:FocusedZmanimBatch,
+  defaults:FocusedZmanDefaults,
+  shabbosEndMinutes:number
+){
+  const dow=new Date(`${date}T12:00:00`).getDay();
+  const rules=schedule.filter(rule=>
+    rule.day_of_week===dow&&rule.service_type.toLowerCase()===service.toLowerCase()
+  );
+
+  return rules.map(rule=>{
+    if(rule.timing_source==="none"){
+      return {label:rule.display_name||service,time:"NO MINYAN",rawTime:""};
+    }
+    if(rule.timing_source==="follows"){
+      return {label:rule.display_name||service,time:rule.follows_text||"Follows Mincha",rawTime:""};
+    }
+    const raw=focusedResolveRuleTime(date,rule,schedule,zmanim,defaults,shabbosEndMinutes);
+    return {
+      label:rule.display_name||service,
+      time:raw?focusedPretty24(raw):"Timing unavailable",
+      rawTime:raw
+    };
+  });
+}
+
+function monthlyFastAutomaticTimes(
+  date:string,
+  title:string,
+  zmanim:FocusedZmanimBatch,
+  defaults:FocusedZmanDefaults,
+  shabbosEndMinutes:number
+){
+  const t=title.toLowerCase();
+  const previous=focusedShiftDate(date,-1);
+  const dawnSource=focusedSourceFromDefault("dawn",defaults);
+  const nightSource=focusedSourceFromDefault("nightfall",defaults);
+
+  let beginRaw="";
+  let endRaw="";
+
+  if(t.includes("yom kippur")||t.includes("tisha b")||t.includes("tish'a b")){
+    const previousSunset=focusedTimeMinutes(zmanim.sunset?.[previous]);
+    if(previousSunset!==null)beginRaw=focusedMinutesTo24(previousSunset);
+  }else{
+    const dawn=focusedTimeMinutes(zmanim.sources?.[dawnSource]?.[date]);
+    if(dawn!==null)beginRaw=focusedMinutesTo24(dawn);
+  }
+
+  if(t.includes("yom kippur")){
+    const sunset=focusedTimeMinutes(zmanim.sunset?.[date]);
+    if(sunset!==null)endRaw=focusedMinutesTo24(sunset+shabbosEndMinutes);
+  }else{
+    const night=focusedTimeMinutes(zmanim.sources?.[nightSource]?.[date]);
+    if(night!==null)endRaw=focusedMinutesTo24(night);
+  }
+
+  return {
+    beginRaw,
+    endRaw,
+    beginDisplay:beginRaw?focusedPretty24(beginRaw):"Automatic time unavailable",
+    endDisplay:endRaw?focusedPretty24(endRaw):"Automatic time unavailable"
+  };
+}
+
 function focusedDateRangeLabel(events:HebcalSpecialEvent[]){
   const sorted=events.slice().sort((a,b)=>a.date.localeCompare(b.date));
   if(sorted.length===1)return focusedDateLabel(sorted[0].date);
