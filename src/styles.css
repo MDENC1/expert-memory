@@ -1454,3 +1454,55 @@ body{color:#172b26}
 }
 .manualOverrideTag{background:#fff1d6;color:#6a4a12}
 .specialConfirmedTag{background:#ece8f8;color:#51427d}
+
+
+/* Calendar add-event modal */
+.calendarModalBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:rgba(15,32,27,.48);
+}
+.calendarModal{
+  width:min(620px,100%);
+  max-height:calc(100vh - 48px);
+  overflow:auto;
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 24px 70px rgba(12,31,26,.28);
+  padding:20px;
+}
+.calendarModalHead{margin-bottom:16px}
+.calendarModalField{
+  display:grid;
+  gap:6px;
+  margin-top:12px;
+  font-size:12px;
+  font-weight:850;
+  color:#29423b;
+}
+.calendarModal input,.calendarModal textarea,.calendarModal select{
+  width:100%;
+  border:1px solid #bcd1c9;
+  border-radius:8px;
+  padding:10px;
+  background:#fff;
+  color:#172b26;
+  font-weight:800;
+}
+.calendarModal textarea{min-height:110px;resize:vertical}
+.calendarModal small{font-size:10px;color:#5a7069;font-weight:650}
+.calendarModalActions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:18px;
+}
+@media(max-width:640px){
+  .calendarModalBackdrop{padding:12px}
+  .calendarModal{padding:16px}
+  .calendarModalActions .primary,.calendarModalActions .secondary{flex:1}
+}
