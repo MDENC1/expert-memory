@@ -924,6 +924,12 @@ export default function App() {
             setDays={setCalendarDays}
             shulId={currentShulId}
             specialCalendarEvents={specialCalendarEvents}
+            scheduleEntries={scheduleEntries}
+            postalCode={postalCode}
+            countryCode={countryCode}
+            locationId={myzmanimLocationId}
+            zmanDefaults={zmanDefaults}
+            shabbosEndMinutes={shabbosEndMinutes}
             focusGroup={monthlyFocusGroup}
             onClearFocus={()=>setMonthlyFocusGroup("")}
             onSpecialSchedulesChanged={()=>setSpecialStatusVersion(v=>v+1)}
