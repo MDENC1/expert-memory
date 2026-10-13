@@ -2364,3 +2364,9 @@ body{color:#172b26}
     grid-template-columns:1fr;
   }
 }
+
+
+.monthlyKislevSpecialEvents{
+  display:grid;
+  gap:14px;
+}
