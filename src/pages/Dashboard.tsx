@@ -150,11 +150,18 @@ export default function Dashboard({
               <div><b>No schedule set for today</b><span>Open Calendar to add or adjust today’s schedule.</span></div>
             )}
           </div>
-          {liveNotice && (
+          {liveNotices.length>0 && (
             <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #edf2f0"}}>
               <span className="eyebrow">On screen now</span>
-              <h3 style={{margin:"4px 0 4px"}}>{liveNotice.headline}</h3>
-              {liveNotice.details && <p style={{margin:0}}>{liveNotice.details}</p>}
+              {liveNotices.map(item=>(
+                <div key={item.id} style={{marginTop:8}}>
+                  <h3 style={{margin:"4px 0 4px"}}>
+                    {item.headline}{item.eventTime ? " · "+item.eventTime : ""}
+                  </h3>
+                  {item.location&&<small style={{display:"block"}}>Location: {item.location}</small>}
+                  {item.details&&<p style={{margin:"3px 0 0"}}>{item.details}</p>}
+                </div>
+              ))}
             </div>
           )}
         </div>
