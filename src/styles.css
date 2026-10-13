@@ -2433,3 +2433,58 @@ body{color:#172b26}
   color:#68746f;
   cursor:not-allowed;
 }
+
+
+/* Goal-product preview: roughly 6 x 4 inch refrigerator display */
+.goalMagnetPreviewWrap{
+  display:grid;
+  justify-items:center;
+  gap:10px;
+  width:100%;
+}
+.goalMagnetDevice{
+  width:min(100%,720px);
+  aspect-ratio:3 / 2;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-sizing:border-box;
+  padding:3.6% 6%;
+  background:linear-gradient(145deg,#fdfdfb,#eeeeea);
+  border:1px solid #c9cbc7;
+  border-radius:22px;
+  box-shadow:
+    0 16px 35px rgba(38,48,44,.13),
+    inset 0 0 0 1px rgba(255,255,255,.75);
+}
+.goalMagnetScreen{
+  width:100%;
+  aspect-ratio:648 / 480;
+  overflow:hidden;
+  background:#f7f6ee;
+  border:2px solid #2f3230;
+  border-radius:5px;
+  box-shadow:
+    inset 0 0 8px rgba(0,0,0,.07),
+    0 1px 2px rgba(0,0,0,.08);
+}
+.goalMagnetScreen canvas{
+  display:block;
+  width:100%;
+  height:100%;
+  background:#fff;
+}
+.goalMagnetCaption{
+  color:#71817c;
+  font-size:10px;
+  text-align:center;
+}
+.fitPreviewPanel .goalMagnetDevice{
+  width:min(100%,620px);
+}
+@media(max-width:760px){
+  .goalMagnetDevice{
+    border-radius:16px;
+    padding:3.5% 5.5%;
+  }
+}
