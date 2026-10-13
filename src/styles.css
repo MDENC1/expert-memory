@@ -1506,3 +1506,47 @@ body{color:#172b26}
   .calendarModal{padding:16px}
   .calendarModalActions .primary,.calendarModalActions .secondary{flex:1}
 }
+
+
+/* Calendar compact New Content modal */
+.calendarContentModal{width:min(700px,100%)}
+.calendarModalContext{margin:5px 0 0;color:#5b7068;font-size:11px;font-weight:650}
+.calendarModalClose{
+  width:34px;
+  height:34px;
+  border:1px solid #cfded8;
+  border-radius:9px;
+  background:#fff;
+  color:#456057;
+  font-size:22px;
+  line-height:1;
+}
+.calendarModalClose:hover{background:#f4faf7}
+.calendarContentGrid{margin-bottom:2px}
+.calendarSelectedDatesNote{
+  margin:10px 0 2px;
+  padding:9px 11px;
+  border-radius:9px;
+  background:#f4faf7;
+  color:#476159;
+  font-size:11px;
+  font-weight:700;
+}
+.calendarRecurrenceBox{padding:11px;margin-top:13px}
+.calendarRecurrenceField{
+  display:grid;
+  gap:6px;
+  margin-top:10px;
+  font-size:12px;
+  font-weight:800;
+  color:#29423b;
+}
+.calendarRecurrenceField select{width:100%;border:1px solid #bcd1c9;border-radius:8px;padding:9px;background:#fff;color:#172b26;font-weight:800}
+.calendarMonthDayGrid{max-height:112px;overflow:auto}
+.calendarContentModal .calendarModalField{margin-top:10px}
+.calendarContentModal .calendarModalField textarea{min-height:82px}
+@media(max-width:640px){
+  .calendarContentModal .formGrid{grid-template-columns:1fr}
+  .calendarContentModal .calendarModalActions{align-items:stretch;flex-direction:column}
+  .calendarContentModal .calendarModalActions button{width:100%}
+}
