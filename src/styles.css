@@ -2186,3 +2186,43 @@ body{color:#172b26}
     justify-content:space-between;
   }
 }
+
+
+/* Monthly Setup Hebrew-year planning */
+.monthlyPeriodControls{
+  display:grid;
+  gap:10px;
+  min-width:min(430px,100%);
+}
+.monthlyYearPicker{
+  display:grid;
+  gap:5px;
+}
+.monthlyYearPicker>span{
+  font-size:11px;
+  font-weight:850;
+  color:#29423b;
+}
+.monthlyYearChoices{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.monthlyYearChoices .choice{
+  min-height:38px;
+  padding:8px 11px;
+  white-space:nowrap;
+}
+@media(max-width:760px){
+  .monthlyPeriodControls{
+    min-width:0;
+    width:100%;
+  }
+  .monthlyYearChoices{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .monthlyYearChoices .choice{
+    width:100%;
+  }
+}
