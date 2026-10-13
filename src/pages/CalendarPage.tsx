@@ -223,6 +223,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [zmanimError,setZmanimError] = useState("");
   const [zmanimSource,setZmanimSource] = useState("");
   const [hebcalEvents,setHebcalEvents] = useState<HebcalSpecialEvent[]>([]);
+  const [hebcalDafYomi,setHebcalDafYomi] = useState<Record<string,string>>({});
   const [hebcalError,setHebcalError] = useState("");
   const [shabbosEndMinutes,setShabbosEndMinutes] = useState(60);
   const [zmanDefaults,setZmanDefaults] = useState<ZmanDefaults>(DEFAULT_ZMAN_DEFAULTS);
@@ -244,6 +245,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setZmanimError("");
     setZmanimSource("");
     setHebcalEvents([]);
+    setHebcalDafYomi({});
     setHebcalError("");
     setZmanDefaults(DEFAULT_ZMAN_DEFAULTS);
   },[shulId]);
@@ -335,7 +337,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       }).then(({data,error})=>{
         if(error)throw error;
         if(!data?.success)throw new Error(data?.error||"Hebcal request failed");
-        return {events:(data.events||[]) as HebcalSpecialEvent[]};
+        return {events:(data.events||[]) as HebcalSpecialEvent[],dafYomi:(data.daf_yomi||{}) as Record<string,string>};
       }).catch(hebcalErr=>({
         __error:`Hebcal: ${String(hebcalErr?.message||hebcalErr)}`
       }));
@@ -406,7 +408,16 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         // replacing it with an empty set and allowing regular schedules through.
         setHebcalError((hebcalRes as any).__error);
       }else{
-        setHebcalEvents(((hebcalRes as any).events||[]) as HebcalSpecialEvent[]);
+        const nextEvents=((hebcalRes as any).events||[]) as HebcalSpecialEvent[];
+        const nextDaf=((hebcalRes as any).dafYomi||{}) as Record<string,string>;
+        setHebcalEvents(prev=>{
+          const outside=prev.filter(event=>event.date<startDate||event.date>endDate);
+          return [...outside,...nextEvents];
+        });
+        setHebcalDafYomi(prev=>{
+          const outside=Object.fromEntries(Object.entries(prev).filter(([date])=>date<startDate||date>endDate));
+          return {...outside,...nextDaf};
+        });
         setHebcalError("");
       }
 
@@ -850,6 +861,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     englishDay:selectedCell.day,
     hebrewDate:selectedCell.hebrewDay,
     hebrewMonth:selectedCell.hebrewMonth,
+    dafYomi:hebcalDafYomi[selectedCell.date],
     isRoshChodesh:selectedCell.isRoshChodesh,
     isShabbos:selectedCell.isShabbos,
     holiday:(selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title)
@@ -1175,9 +1187,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     <>
       <div className="pageHeader">
         <div>
-          <span className="eyebrow">Calendar - LIVE SUPABASE</span>
+          <span className="eyebrow">Calendar</span>
           <h1>{monthName}</h1>
-          <p>Browse past or future months, edit individual days, select multiple dates, and preview exactly what members will see.</p>
+          <p>Review each day’s schedule, make date-specific changes, or update several selected days together.</p>
         </div>
         <div className="headerActions">
           <button className="secondary" onClick={()=>changeMonth(-1)}>← Previous</button>
@@ -1195,10 +1207,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       )}
       <div className="calendarToolbar">
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
-          {multiMode ? "Selecting Multiple Days" : "Select Multiple Days"}
+          {multiMode ? "Multi-Day Edit On" : "Multi-Day Edit"}
         </button>
-        <span>{loading ? "Loading live calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected across any month` : "Click a day to see its real schedule and preview.")}</span>
-        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Timing: ${zmanimSource}` : "Timing source pending")}</small>}
+        <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet.")}</span>
+        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
@@ -1213,6 +1225,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               const keyTimes=keyTimesForDate(cell.date);
               const special=dayMap.get(cell.date);
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
+              const isToday=cell.date===isoDate(new Date());
+              const hasManualOverride=(overrideMap.get(cell.date)||[]).length>0;
+              const hasConfirmedSpecial=Boolean(special?.confirmed_at);
               const hebcalEvent=primaryHebcalEvent(cell.date);
               const missingSpecial=Boolean(blockingHebcalEvent(cell.date))&&!dateHasConfiguredSpecialSchedule(cell.date);
               const holiday=special?.title && !/^tishrei schedule$/i.test(special.title)
@@ -1221,15 +1236,18 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               return (
                 <button
                   key={cell.date}
-                  className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""} ${missingSpecial?"missingSpecialSchedule":""}`}
+                  className={`dayCell ${selected.includes(cell.date)?"selected":""} ${cell.isShabbos?"shabbos":""} ${cell.isRoshChodesh?"roshChodesh":""} ${missingSpecial?"missingSpecialSchedule":""} ${isToday?"today":""}`}
                   onClick={()=>handleDayClick(cell.date)}
                 >
                   <div className="dateTop"><strong>{cell.day}</strong><span>{cell.hebrewDay} {cell.hebrewMonth}</span></div>
                   <div className="dayTags">
+                    {isToday && <span className="todayTag">Today</span>}
                     {holiday && <span className="jewishTag">{holiday}</span>}
                     {missingSpecial && <span className="specialSetupTag">Schedule needed</span>}
+                    {!missingSpecial&&hasConfirmedSpecial&&<span className="specialConfirmedTag">Special schedule</span>}
+                    {hasManualOverride&&<span className="manualOverrideTag">Custom times</span>}
                     {cell.isRoshChodesh && !holiday && <span className="jewishTag">Rosh Chodesh</span>}
-                    {matching.length>0 && <span className="eventCount">{matching.length} scheduled</span>}
+                    {matching.length>0 && <span className="eventCount">{matching.length} item{matching.length===1?"":"s"}</span>}
                   </div>
                   {keyTimes.map(item=>(
                     <div className="calendarKeyTime" key={item.key}>
@@ -1314,7 +1332,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 <div>
                   <span className="eyebrow">Multiple days selected</span>
                   <h2>{selected.length} Selected Days</h2>
-                  <p className="bulkEditHelp">Change a shared time once and it will update only these dates. Blank “Mixed” fields keep each day’s current time until you enter a new one.</p>
+                  <p className="bulkEditHelp">Change a shared time once and it will update only the selected dates. A “Mixed” field means those dates currently have different times; leave it blank to keep those differences.</p>
                 </div>
               </div>
 
@@ -1374,7 +1392,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to Selected Days</button>
             </div>
           ) : (
-            <div className="panel emptyPreview"><strong>Select one day</strong><span>Its editable schedule and magnet preview will appear here.</span></div>
+            <div className="panel emptyPreview"><strong>Select a day</strong><span>Edit its schedule here and see exactly what the magnet will display.</span></div>
           )}
         </aside>
       </div>
