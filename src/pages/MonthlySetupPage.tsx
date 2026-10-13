@@ -1411,8 +1411,16 @@ export default function MonthlySetupPage({
           <div className="monthlyPeriodControls">
             <label className="monthlyMonthSelect">
               <span>Month</span>
-              <select value={month} onChange={e=>{setMonth(e.target.value);setStatus("");setCollapsedDates({});}}>
-                {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
+              <select
+                dir="ltr"
+                value={month}
+                onChange={e=>{setMonth(e.target.value);setStatus("");setCollapsedDates({});}}
+              >
+                {jewishMonthTemplates.map(item=>(
+                  <option key={item.month} value={item.month}>
+                    {`\u2066${item.month}\u2069 — \u2067${monthlyHebrewMonthText(item.month)}\u2069`}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="monthlyYearPicker">
