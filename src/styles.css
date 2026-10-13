@@ -1618,18 +1618,38 @@ body{color:#172b26}
     padding:0!important;
   }
 
-  body *{visibility:hidden!important}
-  .printCalendarSheet,
-  .printCalendarSheet *{visibility:visible!important}
+  .appShell{
+    display:block!important;
+    min-height:0!important;
+  }
+
+  .appShell>.sidebar{
+    display:none!important;
+  }
+
+  .main{
+    margin:0!important;
+    width:100%!important;
+    max-width:none!important;
+    padding:0!important;
+  }
+
+  .main>:not(.printCalendarSheet){
+    display:none!important;
+  }
 
   .printCalendarSheet{
     display:block!important;
-    position:absolute;
-    inset:0;
+    position:static!important;
     width:100%;
+    height:auto;
+    margin:0;
+    padding:0;
     color:#000;
     background:#fff;
     font-family:Arial,Helvetica,sans-serif;
+    page-break-after:avoid;
+    break-after:avoid-page;
   }
 
   .printCalendarHeader{
@@ -1665,7 +1685,14 @@ body{color:#172b26}
     grid-template-columns:repeat(7,1fr);
     border-left:1px solid #000;
     border-top:1px solid #000;
+    width:100%;
+    break-inside:avoid;
+    page-break-inside:avoid;
   }
+
+  .printCalendarGrid.printWeeks4{grid-template-rows:auto repeat(4,1.52in)}
+  .printCalendarGrid.printWeeks5{grid-template-rows:auto repeat(5,1.20in)}
+  .printCalendarGrid.printWeeks6{grid-template-rows:auto repeat(6,.99in)}
 
   .printWeekday{
     padding:4px 3px;
@@ -1680,7 +1707,8 @@ body{color:#172b26}
   }
 
   .printDayCell{
-    min-height:1.18in;
+    min-height:0;
+    height:auto;
     padding:4px 5px;
     border-right:1px solid #000;
     border-bottom:1px solid #000;
