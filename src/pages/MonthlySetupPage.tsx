@@ -574,6 +574,7 @@ export default function MonthlySetupPage({
   onSpecialSchedulesChanged?:()=>void;
 }) {
   const [month,setMonth] = useState("Tishrei");
+  const [monthPickerOpen,setMonthPickerOpen] = useState(false);
   const [planNextYear,setPlanNextYear] = useState(false);
   const [status,setStatus] = useState("");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
@@ -1409,20 +1410,46 @@ export default function MonthlySetupPage({
             <p className="helperText">Monthly Setup defaults to the current Hebrew year. Use Plan Next Year only when you intentionally want to prepare the following year.</p>
           </div>
           <div className="monthlyPeriodControls">
-            <label className="monthlyMonthSelect">
+            <div className="monthlyMonthSelect">
               <span>Month</span>
-              <select
-                dir="ltr"
-                value={month}
-                onChange={e=>{setMonth(e.target.value);setStatus("");setCollapsedDates({});}}
-              >
-                {jewishMonthTemplates.map(item=>(
-                  <option key={item.month} value={item.month}>
-                    {`\u2066${item.month}\u2069 — \u2067${monthlyHebrewMonthText(item.month)}\u2069`}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="monthlyMonthDropdown">
+                <button
+                  type="button"
+                  className="monthlyMonthDropdownButton"
+                  aria-haspopup="listbox"
+                  aria-expanded={monthPickerOpen}
+                  onClick={()=>setMonthPickerOpen(open=>!open)}
+                >
+                  <span className="monthlyMonthEnglish" dir="ltr">{month}</span>
+                  <span className="monthlyMonthDash">-</span>
+                  <span className="monthlyMonthHebrew" dir="rtl">{monthlyHebrewMonthText(month)}</span>
+                  <span className="monthlyMonthCaret" aria-hidden="true">▾</span>
+                </button>
+                {monthPickerOpen&&(
+                  <div className="monthlyMonthDropdownMenu" role="listbox" aria-label="Jewish month">
+                    {jewishMonthTemplates.map(item=>(
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={item.month===month}
+                        className={item.month===month?"monthlyMonthOption active":"monthlyMonthOption"}
+                        key={item.month}
+                        onClick={()=>{
+                          setMonth(item.month);
+                          setMonthPickerOpen(false);
+                          setStatus("");
+                          setCollapsedDates({});
+                        }}
+                      >
+                        <span className="monthlyMonthEnglish" dir="ltr">{item.month}</span>
+                        <span className="monthlyMonthDash">-</span>
+                        <span className="monthlyMonthHebrew" dir="rtl">{monthlyHebrewMonthText(item.month)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="monthlyYearPicker">
               <span>Year</span>
               <div className="monthlyYearChoices">
