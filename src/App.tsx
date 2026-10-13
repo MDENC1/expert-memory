@@ -332,7 +332,8 @@ function mapNotice(row:any):Notice {
       enabled:true,
       frequency:row.recurrence_type || undefined,
       weekdays:row.recurrence_weekdays || undefined,
-      monthDays:row.recurrence_month_days || undefined
+      monthDays:row.recurrence_month_days || undefined,
+      excludedDates:(row.recurrence_excluded_dates||[]).map((value:string)=>String(value))
     } : {enabled:false},
     priority,
     publishMode: row.immediate_sent_at ? "immediate" : "scheduled",
@@ -949,6 +950,7 @@ export default function App() {
           <NoticesPage
             notices={notices}
             setNotices={setNotices}
+            shulId={currentShulId}
             remainingPushes={remainingPushes}
             usePush={() => setPushesUsed(v => Math.min(2, v + 1))}
           />
