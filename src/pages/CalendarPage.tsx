@@ -799,10 +799,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const usesWeeklyRules = group==="tishrei schedule" || group==="chol hamoed";
 
     if(usesWeeklyRules && title.includes("plag mincha")){
-      return resolveRuleTime(date,"plag",-10,true,5,"down") || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+      return resolveRuleTime(date,"plag",-10,true,5,"down") || (row.event_time?minutesToDisplay(roundMinutes((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)),5,"down")):"");
     }
     if(usesWeeklyRules && title==="mincha / maariv"){
-      return resolveRuleTime(date,"sunset",-10,true,5,"down") || (row.event_time?minutesToDisplay(floorToFive((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)))):"");
+      return resolveRuleTime(date,"sunset",-10,true,5,"down") || (row.event_time?minutesToDisplay(roundMinutes((Number(row.event_time.slice(0,2))*60)+Number(row.event_time.slice(3,5)),5,"down")):"");
     }
     return row.event_time?prettyTime(row.event_time):"";
   };
