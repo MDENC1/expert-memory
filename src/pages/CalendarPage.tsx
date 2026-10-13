@@ -1360,6 +1360,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         notice.id===editingNoticeId
           ? {
               ...notice,
+              status:selectedDay===isoDate(new Date())?"scheduled":notice.status,
               recurrence:{
                 ...(notice.recurrence||{enabled:true}),
                 enabled:true,
