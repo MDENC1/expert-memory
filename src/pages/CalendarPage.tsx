@@ -239,7 +239,6 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [specialDays,setSpecialDays] = useState<SpecialDay[]>([]);
   const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
   const [loading,setLoading] = useState(false);
-  const [refreshingTimes,setRefreshingTimes] = useState(false);
   const [error,setError] = useState("");
   const [zmanim,setZmanim] = useState<ZmanimBatch>({});
   const [zmanimError,setZmanimError] = useState("");
@@ -294,54 +293,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   useEffect(()=>{
     let cancelled=false;
-    const cacheKey=`magnets.calendar.v2:${shulId}:${startDate}`;
-    let cached:any=null;
-
-    // Show previously loaded timing/Jewish-calendar data immediately.
-    // Fresh data still revalidates below in the background.
-    try{
-      const raw=localStorage.getItem(cacheKey);
-      if(raw){
-        cached=JSON.parse(raw);
-        if(cached?.zmanim){
-          const next=cached.zmanim as ZmanimBatch;
-          setZmanim(prev=>{
-            const mergedSources:{[key:string]:Record<string,string>}={...(prev.sources||{})};
-            for(const [sourceKey,sourceMap] of Object.entries(next.sources||{})){
-              mergedSources[sourceKey]={...(mergedSources[sourceKey]||{}),...(sourceMap||{})};
-            }
-            return {
-              plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
-              sunset:{...(prev.sunset||{}),...(next.sunset||{})},
-              sunrise:{...(prev.sunrise||{}),...(next.sunrise||{})},
-              latestShema:{...(prev.latestShema||{}),...(next.latestShema||{})},
-              midday:{...(prev.midday||{}),...(next.midday||{})},
-              candleLighting:{...(prev.candleLighting||{}),...(next.candleLighting||{})},
-              sources:mergedSources
-            };
-          });
-          setZmanimSource(cached.zmanimSource||"MyZmanim");
-        }
-        if(Array.isArray(cached?.hebcalEvents)){
-          setHebcalEvents(prev=>{
-            const outside=prev.filter(event=>event.date<startDate||event.date>endDate);
-            return [...outside,...cached.hebcalEvents];
-          });
-        }
-        if(cached?.hebcalDafYomi){
-          setHebcalDafYomi(prev=>{
-            const outside=Object.fromEntries(Object.entries(prev).filter(([date])=>date<startDate||date>endDate));
-            return {...outside,...cached.hebcalDafYomi};
-          });
-        }
-      }
-    }catch{
-      cached=null;
-    }
-
     async function loadMonth(){
       setLoading(true);
-      setRefreshingTimes(true);
       setError("");
       setZmanimError("");
 
@@ -374,8 +327,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           .maybeSingle()
       ]);
 
-      // MyZmanim only exposes a single-day GetDay endpoint, so month timing
-      // refreshes are intentionally background work and never block the calendar.
+      // MyZmanim owns clock times. Hebcal/calendar data is a separate concern
+      // and must never silently substitute different zmanim calculations.
       const zmanimPromise=postalCode
         ? supabase.functions.invoke("myzmanim",{
             body:{
@@ -397,20 +350,20 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         : Promise.resolve({__error:"No postal code configured"});
 
       const hebcalPromise=supabase.functions.invoke("hebcal-calendar",{
-        body:{start_date:startDate,end_date:endDate,country_code:countryCode}
+        body:{
+          start_date:startDate,
+          end_date:endDate,
+          country_code:countryCode
+        }
       }).then(({data,error})=>{
         if(error)throw error;
         if(!data?.success)throw new Error(data?.error||"Hebcal request failed");
-        return {
-          events:(data.events||[]) as HebcalSpecialEvent[],
-          dafYomi:(data.daf_yomi||{}) as Record<string,string>
-        };
+        return {events:(data.events||[]) as HebcalSpecialEvent[],dafYomi:(data.daf_yomi||{}) as Record<string,string>};
       }).catch(hebcalErr=>({
         __error:`Hebcal: ${String(hebcalErr?.message||hebcalErr)}`
       }));
 
-      // Stored schedules are the interactive part of the page. Load them first.
-      const [daysRes,entriesRes,overridesRes,zmanimSettingsRes]=await supabasePromise;
+      const [[daysRes,entriesRes,overridesRes,zmanimSettingsRes],zmanimRes,hebcalRes]=await Promise.all([supabasePromise,zmanimPromise,hebcalPromise]);
       if(cancelled)return;
 
       const err=daysRes.error||entriesRes.error||overridesRes.error||zmanimSettingsRes.error;
@@ -442,15 +395,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           });
         }
       }
-      setLoading(false);
-
-      // Slow external calculations finish after the page is already usable.
-      const [zmanimRes,hebcalRes]=await Promise.all([zmanimPromise,hebcalPromise]);
-      if(cancelled)return;
-
-      const nextCache:any={...(cached||{}),savedAt:Date.now()};
 
       if((zmanimRes as any).__error){
+        setZmanim({});
+        setZmanimSource("");
         setZmanimError((zmanimRes as any).__error);
       }else{
         const wrapped=zmanimRes as any;
@@ -458,7 +406,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         setZmanim(prev=>{
           const mergedSources:{[key:string]:Record<string,string>}={...(prev.sources||{})};
           for(const [sourceKey,sourceMap] of Object.entries(next.sources||{})){
-            mergedSources[sourceKey]={...(mergedSources[sourceKey]||{}),...(sourceMap||{})};
+            mergedSources[sourceKey]={
+              ...(mergedSources[sourceKey]||{}),
+              ...(sourceMap||{})
+            };
           }
           return {
             plagHaMincha:{...(prev.plagHaMincha||{}),...(next.plagHaMincha||{})},
@@ -470,13 +421,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             sources:mergedSources
           };
         });
-        setZmanimSource(wrapped.source||"MyZmanim");
+        setZmanimSource(wrapped.source||"");
         setZmanimError("");
-        nextCache.zmanim=next;
-        nextCache.zmanimSource=wrapped.source||"MyZmanim";
       }
-
       if((hebcalRes as any).__error){
+        // Keep any already-loaded calendar metadata rather than silently
+        // replacing it with an empty set and allowing regular schedules through.
         setHebcalError((hebcalRes as any).__error);
       }else{
         const nextEvents=((hebcalRes as any).events||[]) as HebcalSpecialEvent[];
@@ -490,17 +440,14 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           return {...outside,...nextDaf};
         });
         setHebcalError("");
-        nextCache.hebcalEvents=nextEvents;
-        nextCache.hebcalDafYomi=nextDaf;
       }
 
-      try{localStorage.setItem(cacheKey,JSON.stringify(nextCache));}catch{}
-      setRefreshingTimes(false);
+      setLoading(false);
     }
-
-    void loadMonth();
+    loadMonth();
     return()=>{cancelled=true};
   },[startDate,endDate,postalCode,countryCode,locationId,shulId]);
+
   const dayMap=useMemo(()=>new Map(specialDays.map(d=>[d.event_date,d])),[specialDays]);
   const entriesMap=useMemo(()=>{
     const m=new Map<string,SpecialEntry[]>();
@@ -1283,8 +1230,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         <button className={multiMode?"choice active":"secondary"} onClick={()=>{setMultiMode(v=>!v);setSelected([]);setShowAdd(false);}}>
           {multiMode ? "Multi-Day Edit On" : "Multi-Day Edit"}
         </button>
-        <span>{selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet."}</span>
-        <small>{zmanimError ? "Some calculated times are unavailable" : refreshingTimes ? "Refreshing calculated times…" : (zmanimSource ? `Times from ${zmanimSource}` : loading ? "Loading saved schedules…" : "Schedule ready")}</small>
+        <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet.")}</span>
+        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>}
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
