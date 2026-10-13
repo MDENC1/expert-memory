@@ -959,7 +959,9 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     shulScheduleRows:selectedRows
   } : undefined;
 
-  const previewNotice=selectedDay ? notices.find(n=>noticeMatchesDate(n,selectedDay)) : undefined;
+  const previewNotices=selectedDay
+    ? notices.filter(n=>noticeMatchesDate(n,selectedDay))
+    : [];
 
   const changeMonth=(delta:number)=>{
     setViewDate(new Date(year,month+delta,1,12));
@@ -1744,7 +1746,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
                 <button className="secondary fullButton" onClick={openAddModal}>+ Add Event / Notice to This Day</button>
               </div>
-              <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} fit />
+              <MagnetPreview day={selectedCalendarDay} notices={previewNotices} shulName={shulName} fit />
             </>
           ) : selected.length>1 ? (
             <div className="panel compactPanel">
