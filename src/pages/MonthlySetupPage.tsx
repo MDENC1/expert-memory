@@ -552,7 +552,7 @@ export default function MonthlySetupPage({
   const [month,setMonth] = useState("Tishrei");
   const [status,setStatus] = useState("");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
-  const [monthlyScheduleOverrides,setMonthlyScheduleOverrides] = useState<Record<string,Partial<Record<MonthlyService,string>>>>({});
+  const [monthlyScheduleOverrides,setMonthlyScheduleOverrides] = useState<Record<string,Partial<Record<MonthlyService,string[]>>>>({});
   const [monthlyZmanim,setMonthlyZmanim] = useState<FocusedZmanimBatch>({});
   const [monthHebcalEvents,setMonthHebcalEvents] = useState<HebcalSpecialEvent[]>([]);
   const [monthlyLoading,setMonthlyLoading] = useState(false);
@@ -1027,19 +1027,85 @@ export default function MonthlySetupPage({
     return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
   };
 
-  const additionalValue=(date:string,key:string)=>values[`${date}|${key}`]||"";
-  const setAdditionalValue=(date:string,key:string,value:string)=>{
-    setValues(current=>({...current,[`${date}|${key}`]:value}));
+  const additionalValues=(date:string,key:string)=>{
+    const current=values[`${date}|${key}`];
+    return current?.length?current:[""];
   };
 
-  const setMonthlyScheduleOverride=(date:string,service:MonthlyService,value:string)=>{
-    setMonthlyScheduleOverrides(current=>({
-      ...current,
-      [date]:{
-        ...(current[date]||{}),
-        [service]:value
-      }
-    }));
+  const setAdditionalValue=(date:string,key:string,index:number,value:string)=>{
+    setValues(current=>{
+      const mapKey=`${date}|${key}`;
+      const next=[...(current[mapKey]?.length?current[mapKey]:[""])];
+      next[index]=value;
+      return {...current,[mapKey]:next};
+    });
+  };
+
+  const addAdditionalValue=(date:string,key:string)=>{
+    setValues(current=>{
+      const mapKey=`${date}|${key}`;
+      const next=current[mapKey]?.length?[...current[mapKey]]:[""];
+      next.push("");
+      return {...current,[mapKey]:next};
+    });
+  };
+
+  const removeAdditionalValue=(date:string,key:string,index:number)=>{
+    setValues(current=>{
+      const mapKey=`${date}|${key}`;
+      const next=(current[mapKey]||[""]).filter((_,i)=>i!==index);
+      return {...current,[mapKey]:next.length?next:[""]};
+    });
+  };
+
+  const serviceOverrideValues=(date:string,service:MonthlyService)=>{
+    const current=monthlyScheduleOverrides[date]?.[service];
+    return current?.length?current:[""];
+  };
+
+  const setMonthlyScheduleOverride=(date:string,service:MonthlyService,index:number,value:string)=>{
+    setMonthlyScheduleOverrides(current=>{
+      const serviceValues=current[date]?.[service]?.length
+        ? [...(current[date]?.[service]||[])]
+        : [""];
+      serviceValues[index]=value;
+      return {
+        ...current,
+        [date]:{
+          ...(current[date]||{}),
+          [service]:serviceValues
+        }
+      };
+    });
+  };
+
+  const addMonthlyScheduleOverride=(date:string,service:MonthlyService)=>{
+    setMonthlyScheduleOverrides(current=>{
+      const serviceValues=current[date]?.[service]?.length
+        ? [...(current[date]?.[service]||[])]
+        : [""];
+      serviceValues.push("");
+      return {
+        ...current,
+        [date]:{
+          ...(current[date]||{}),
+          [service]:serviceValues
+        }
+      };
+    });
+  };
+
+  const removeMonthlyScheduleOverride=(date:string,service:MonthlyService,index:number)=>{
+    setMonthlyScheduleOverrides(current=>{
+      const serviceValues=(current[date]?.[service]||[""]).filter((_,i)=>i!==index);
+      return {
+        ...current,
+        [date]:{
+          ...(current[date]||{}),
+          [service]:serviceValues.length?serviceValues:[""]
+        }
+      };
+    });
   };
 
   const regularServiceDisplay=(date:string,service:MonthlyService)=>{
@@ -1051,7 +1117,7 @@ export default function MonthlySetupPage({
       zmanDefaults,
       shabbosEndMinutes
     );
-    if(!rows.length)return "No regular time";
+    if(!rows.length)return "Not scheduled in Settings for this weekday";
     return rows.map(row=>row.time).join(" · ");
   };
 
@@ -1087,21 +1153,31 @@ export default function MonthlySetupPage({
           const dow=new Date(`${card.date}T12:00:00`).getDay();
           const dayRules=scheduleEntries.filter(rule=>rule.day_of_week===dow);
           const followsMaariv=dayRules.some(rule=>
-            rule.service_type.toLowerCase()==="maariv"&&rule.timing_source==="follows"
+            (rule.service_type.toLowerCase()==="maariv"&&rule.timing_source==="follows")||
+            (rule.service_type.toLowerCase()==="mincha"&&Boolean(rule.follows_text))
           );
           let sortOrder=10;
 
           for(const service of MONTHLY_SERVICES){
-            const override=monthlyScheduleOverrides[card.date]?.[service]||"";
-            if(override){
-              rows.push({
-                title:service,
-                event_time:override,
-                approximate:false,
-                note:null,
-                sort_order:sortOrder
-              });
-              sortOrder+=10;
+            const overrides=(monthlyScheduleOverrides[card.date]?.[service]||[])
+              .filter(Boolean);
+            const hasExplicitMaariv=(monthlyScheduleOverrides[card.date]?.Maariv||[])
+              .some(Boolean);
+
+            if(overrides.length){
+              for(const override of overrides){
+                const title=service==="Mincha"&&followsMaariv&&!hasExplicitMaariv
+                  ?"Mincha / Maariv"
+                  :service;
+                rows.push({
+                  title,
+                  event_time:override,
+                  approximate:false,
+                  note:null,
+                  sort_order:sortOrder
+                });
+                sortOrder+=10;
+              }
               continue;
             }
 
@@ -1153,16 +1229,17 @@ export default function MonthlySetupPage({
           if(end)rows.push({title:"Fast Ends",event_time:end,approximate:false,note:null,sort_order:90});
         }
 
-        card.additional.forEach((field,index)=>{
-          const value=additionalValue(card.date,field.key);
-          if(value){
+        let additionalSort=100;
+        card.additional.forEach(field=>{
+          for(const value of additionalValues(card.date,field.key).filter(Boolean)){
             rows.push({
               title:field.label,
               event_time:value,
               approximate:false,
               note:null,
-              sort_order:100+(index*10)
+              sort_order:additionalSort
             });
+            additionalSort+=10;
           }
         });
 
