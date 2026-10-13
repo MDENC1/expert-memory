@@ -268,6 +268,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [newWeekdays,setNewWeekdays] = useState<number[]>([]);
   const [newMonthDays,setNewMonthDays] = useState<number[]>([]);
   const [savingContent,setSavingContent] = useState(false);
+  const [editingNoticeId,setEditingNoticeId] = useState<string|null>(null);
   const [specialDays,setSpecialDays] = useState<SpecialDay[]>([]);
   const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
   const [loading,setLoading] = useState(false);
@@ -1222,6 +1223,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const openAddModal=()=>{
     if(!selected.length)return;
     const sorted=[...selected].sort();
+    setEditingNoticeId(null);
     setNewType("General Notice");
     setNewHeadline("");
     setNewDetails("");
@@ -1235,6 +1237,25 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setShowAdd(true);
   };
 
+  const openEditModal=(notice:Notice)=>{
+    setEditingNoticeId(notice.id);
+    setNewType(notice.type);
+    setNewHeadline(notice.headline);
+    setNewDetails(notice.details);
+    setNewTime(notice.eventTime||"");
+    setNewStartAt(notice.startAt);
+    setNewEndAt(notice.endAt);
+    setNewRecurring(Boolean(notice.recurrence?.enabled));
+    setNewFrequency(notice.recurrence?.frequency||"weekly");
+    setNewWeekdays(notice.recurrence?.weekdays||[]);
+    setNewMonthDays(notice.recurrence?.monthDays||[]);
+    setShowAdd(true);
+  };
+
+  const selectedDayNotices=selectedDay
+    ? notices.filter(notice=>noticeMatchesDate(notice,selectedDay))
+    : [];
+
   const addToSelectedDates=async(mode:"scheduled"|"immediate")=>{
     if(!selected.length||!newHeadline.trim())return;
     if(mode==="immediate"&&remainingPushes<=0)return;
@@ -1245,68 +1266,122 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const recurring=canNewContentRecur&&newRecurring;
     const eventTime=newContentNeedsTime&&newTime ? (displayTimeTo24(newTime)||null) : null;
 
-    const payload=selected.length===1
-      ? [{
-          shul_id:shulId,
-          content_type:newType,
-          title:newHeadline.trim(),
-          details:newDetails.trim()||null,
-          display_start:newStartAt||selected[0],
-          display_end:newEndAt||selected[0],
-          event_time:eventTime,
-          recurring,
-          recurrence_type:recurring?newFrequency:null,
-          recurrence_weekdays:recurring&&newFrequency==="weekly"?newWeekdays:[],
-          recurrence_month_days:recurring&&newFrequency==="monthly"?newMonthDays:[],
-          active:true,
-          priority_level:2,
-          immediate_sent_at:mode==="immediate"?new Date().toISOString():null
-        }]
-      : selected.map(date=>({
-          shul_id:shulId,
-          content_type:newType,
-          title:newHeadline.trim(),
-          details:newDetails.trim()||null,
-          display_start:date,
-          display_end:date,
-          event_time:eventTime,
-          recurring:false,
-          recurrence_type:null,
-          recurrence_weekdays:[],
-          recurrence_month_days:[],
-          active:true,
-          priority_level:2,
-          immediate_sent_at:mode==="immediate"?new Date().toISOString():null
-        }));
+    if(editingNoticeId){
+      const existing=notices.find(notice=>notice.id===editingNoticeId);
+      const updatePayload={
+        content_type:newType,
+        title:newHeadline.trim(),
+        details:newDetails.trim()||null,
+        display_start:newStartAt||(existing?.startAt||selected[0]),
+        display_end:newEndAt||(existing?.endAt||selected[0]),
+        event_time:eventTime,
+        recurring,
+        recurrence_type:recurring?newFrequency:null,
+        recurrence_weekdays:recurring&&newFrequency==="weekly"?newWeekdays:[],
+        recurrence_month_days:recurring&&newFrequency==="monthly"?newMonthDays:[],
+        updated_at:new Date().toISOString(),
+        ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
+      };
 
-    const {data,error}=await supabase.from("notices_events").insert(payload).select("*");
-    if(error){
-      setError(error.message);
-      setSavingContent(false);
-      return;
+      const {data,error}=await supabase
+        .from("notices_events")
+        .update(updatePayload)
+        .eq("id",editingNoticeId)
+        .eq("shul_id",shulId)
+        .select("*")
+        .maybeSingle();
+
+      if(error||!data){
+        setError(error?.message||"Could not update this notice.");
+        setSavingContent(false);
+        return;
+      }
+
+      const updated:Notice={
+        id:data.id,
+        type:data.content_type,
+        headline:data.title,
+        details:data.details||"",
+        startAt:data.display_start,
+        endAt:data.display_end,
+        eventTime:data.event_time?prettyTime(data.event_time):undefined,
+        recurrence:{
+          enabled:Boolean(data.recurring),
+          frequency:data.recurrence_type||undefined,
+          weekdays:data.recurrence_weekdays||[],
+          monthDays:data.recurrence_month_days||[]
+        },
+        priority:existing?.priority||"normal",
+        publishMode:mode==="immediate"?"immediate":(existing?.publishMode||"scheduled"),
+        status:mode==="immediate"?"live":(existing?.status||"scheduled")
+      };
+
+      setNotices(notices.map(notice=>notice.id===editingNoticeId?updated:notice));
+      if(mode==="immediate")usePush();
+    }else{
+      const payload=selected.length===1
+        ? [{
+            shul_id:shulId,
+            content_type:newType,
+            title:newHeadline.trim(),
+            details:newDetails.trim()||null,
+            display_start:newStartAt||selected[0],
+            display_end:newEndAt||selected[0],
+            event_time:eventTime,
+            recurring,
+            recurrence_type:recurring?newFrequency:null,
+            recurrence_weekdays:recurring&&newFrequency==="weekly"?newWeekdays:[],
+            recurrence_month_days:recurring&&newFrequency==="monthly"?newMonthDays:[],
+            active:true,
+            priority_level:2,
+            immediate_sent_at:mode==="immediate"?new Date().toISOString():null
+          }]
+        : selected.map(date=>({
+            shul_id:shulId,
+            content_type:newType,
+            title:newHeadline.trim(),
+            details:newDetails.trim()||null,
+            display_start:date,
+            display_end:date,
+            event_time:eventTime,
+            recurring:false,
+            recurrence_type:null,
+            recurrence_weekdays:[],
+            recurrence_month_days:[],
+            active:true,
+            priority_level:2,
+            immediate_sent_at:mode==="immediate"?new Date().toISOString():null
+          }));
+
+      const {data,error}=await supabase.from("notices_events").insert(payload).select("*");
+      if(error){
+        setError(error.message);
+        setSavingContent(false);
+        return;
+      }
+
+      const additions:Notice[]=(data||[]).map((row:any)=>({
+        id:row.id,
+        type:row.content_type,
+        headline:row.title,
+        details:row.details||"",
+        startAt:row.display_start,
+        endAt:row.display_end,
+        eventTime:row.event_time?prettyTime(row.event_time):undefined,
+        recurrence:{
+          enabled:Boolean(row.recurring),
+          frequency:row.recurrence_type||undefined,
+          weekdays:row.recurrence_weekdays||[],
+          monthDays:row.recurrence_month_days||[]
+        },
+        priority:"normal",
+        publishMode:mode,
+        status:mode==="immediate"?"live":"scheduled"
+      }));
+
+      setNotices([...additions,...notices]);
+      if(mode==="immediate")usePush();
     }
-
-    const additions:Notice[]=(data||[]).map((row:any)=>({
-      id:row.id,
-      type:row.content_type,
-      headline:row.title,
-      details:row.details||"",
-      startAt:row.display_start,
-      endAt:row.display_end,
-      eventTime:row.event_time?prettyTime(row.event_time):undefined,
-      recurrence:{
-        enabled:Boolean(row.recurring),
-        frequency:row.recurrence_type||undefined,
-        weekdays:row.recurrence_weekdays||[],
-        monthDays:row.recurrence_month_days||[]
-      },
-      priority:"normal",
-      publishMode:mode,
-      status:mode==="immediate"?"live":"scheduled"
-    }));
-
-    setNotices([...additions,...notices]);
-    if(mode==="immediate")usePush();
 
     setNewHeadline("");
     setNewDetails("");
@@ -1314,6 +1389,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setNewRecurring(false);
     setNewWeekdays([]);
     setNewMonthDays([]);
+    setEditingNoticeId(null);
     setShowAdd(false);
     setSavingContent(false);
   };
@@ -1463,6 +1539,33 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   )}
                 </div>
                 {daySaveMessage&&<div className="daySaveMessage">{daySaveMessage}</div>}
+
+                {selectedDayNotices.length>0&&(
+                  <div className="selectedDayNotices">
+                    <div className="selectedDayNoticesHead">
+                      <span className="eyebrow">Notices & Events</span>
+                      <strong>{selectedDayNotices.length} on this day</strong>
+                    </div>
+                    {selectedDayNotices.map(notice=>(
+                      <div className="selectedDayNoticeCard" key={notice.id}>
+                        <div className="selectedDayNoticeBody">
+                          <div className="selectedDayNoticeTop">
+                            <span className="typeBadge">{notice.type}</span>
+                            {notice.recurrence?.enabled&&<span className="selectedDayRecurring">↻ Recurring</span>}
+                          </div>
+                          <strong>{notice.headline}</strong>
+                          {notice.eventTime&&<span className="selectedDayNoticeTime">{notice.eventTime}</span>}
+                          {notice.details&&<p>{notice.details}</p>}
+                          {notice.recurrence?.enabled&&(
+                            <small>Applies {notice.startAt} → {notice.endAt}</small>
+                          )}
+                        </div>
+                        <button className="secondary selectedDayNoticeEdit" onClick={()=>openEditModal(notice)}>Edit</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button className="secondary fullButton" onClick={openAddModal}>+ Add Event / Notice to This Day</button>
               </div>
               <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} fit />
@@ -1540,7 +1643,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       </div>
 
       {showAdd && selected.length>0 && (
-        <div className="calendarModalBackdrop" onMouseDown={()=>setShowAdd(false)}>
+        <div className="calendarModalBackdrop" onMouseDown={()=>{setShowAdd(false);setEditingNoticeId(null)}}>
           <div
             className="calendarModal calendarContentModal"
             role="dialog"
@@ -1550,15 +1653,19 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           >
             <div className="panelHead calendarModalHead">
               <div>
-                <span className="eyebrow">New content</span>
-                <h2>Add Notice or Event</h2>
+                <span className="eyebrow">{editingNoticeId?"Edit content":"New content"}</span>
+                <h2>{editingNoticeId?"Edit Notice or Event":"Add Notice or Event"}</h2>
                 <p className="calendarModalContext">
-                  {selected.length===1
-                    ? `From Calendar · ${new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selected[0]}T12:00:00`))}`
-                    : `From Calendar · ${selected.length} selected days`}
+                  {editingNoticeId
+                    ? (newRecurring
+                        ? "Editing recurring content · changes apply to all matching dates"
+                        : "Editing content from Calendar")
+                    : selected.length===1
+                      ? `From Calendar · ${new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selected[0]}T12:00:00`))}`
+                      : `From Calendar · ${selected.length} selected days`}
                 </p>
               </div>
-              <button className="calendarModalClose" aria-label="Close" onClick={()=>setShowAdd(false)}>×</button>
+              <button className="calendarModalClose" aria-label="Close" onClick={()=>{setShowAdd(false);setEditingNoticeId(null)}}>×</button>
             </div>
 
             <div className="formGrid calendarContentGrid">
@@ -1598,7 +1705,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               )}
             </div>
 
-            {selected.length>1&&(
+            {!editingNoticeId&&selected.length>1&&(
               <div className="calendarSelectedDatesNote">
                 This content will be added only to the {selected.length} dates you selected.
               </div>
@@ -1675,12 +1782,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             )}
 
             <div className="formActions calendarModalActions">
-              <button className="secondary" disabled={savingContent} onClick={()=>setShowAdd(false)}>Cancel</button>
+              <button className="secondary" disabled={savingContent} onClick={()=>{setShowAdd(false);setEditingNoticeId(null)}}>Cancel</button>
               <button className="secondary" disabled={savingContent||!newHeadline.trim()} onClick={()=>addToSelectedDates("scheduled")}>
-                {savingContent?"Saving…":"Save for regular update"}
+                {savingContent?"Saving…":editingNoticeId?"Save changes":"Save for regular update"}
               </button>
               <button className="primary" disabled={savingContent||!newHeadline.trim()||remainingPushes<=0} onClick={()=>addToSelectedDates("immediate")}>
-                Send to Magnets Now ({remainingPushes} left)
+                {editingNoticeId?"Save & Send Now":"Send to Magnets Now"} ({remainingPushes} left)
               </button>
             </div>
           </div>
