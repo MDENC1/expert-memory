@@ -2035,3 +2035,45 @@ body{color:#172b26}
   .monthlySpecialTimeRow{align-items:stretch}
   .monthlyTimeActions{align-items:flex-start}
 }
+
+
+/* Chol Hamoed special events */
+.monthlySpecialEventsBlock{
+  background:#f8fbfa;
+  border-style:dashed;
+}
+.monthlyCustomEventList{
+  display:grid;
+  gap:10px;
+}
+.monthlyCustomEventRow{
+  display:grid;
+  grid-template-columns:minmax(220px,1.4fr) minmax(150px,.7fr) auto;
+  gap:10px;
+  align-items:end;
+}
+.monthlyCustomEventRow label{
+  display:grid;
+  gap:5px;
+}
+.monthlyCustomEventRow label>span{
+  font-size:11px;
+  font-weight:850;
+  color:#334742;
+}
+.monthlyCustomEventRow input{
+  width:100%;
+  min-height:40px;
+}
+.monthlyAddSpecialEvent{
+  justify-self:start;
+}
+@media(max-width:760px){
+  .monthlyCustomEventRow{
+    grid-template-columns:1fr;
+    align-items:stretch;
+  }
+  .monthlyCustomEventRow .monthlyRemoveTime{
+    justify-self:start;
+  }
+}
