@@ -4,6 +4,7 @@ import type { HebcalSpecialEvent, LiveScheduleEntry, SpecialSetupAlert } from ".
 import { AlertTriangle, CalendarClock } from "lucide-react";
 import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
+import { magnetPngBase64 } from "../lib/renderMagnet";
 
 const dayNames=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Shabbos"];
 function prettyTime(t:string|null){
@@ -27,78 +28,6 @@ function shortDate(value:string){
 }
 
 
-function clippedText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number){
-  if(ctx.measureText(text).width<=maxWidth)return text;
-  let out=text;
-  while(out.length>1&&ctx.measureText(out+"…").width>maxWidth)out=out.slice(0,-1);
-  return out+"…";
-}
-
-function renderBadgerPng(day:CalendarDay,notice:Notice|undefined,shulName:string){
-  const canvas=document.createElement("canvas");
-  canvas.width=264;
-  canvas.height=176;
-  const ctx=canvas.getContext("2d");
-  if(!ctx)throw new Error("Could not create Badger image.");
-
-  ctx.fillStyle="#fff";
-  ctx.fillRect(0,0,264,176);
-  ctx.fillStyle="#000";
-  ctx.textBaseline="top";
-
-  const dateLabel=new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric"})
-    .format(new Date(day.date+"T12:00:00"));
-
-  ctx.font="700 13px Arial";
-  ctx.fillText(clippedText(ctx,shulName.toUpperCase(),172),5,4);
-  ctx.font="9px Arial";
-  ctx.textAlign="right";
-  ctx.fillText(dateLabel,259,6);
-  ctx.textAlign="left";
-  ctx.fillRect(4,25,256,1);
-
-  const drawColumn=(title:string,rows:{label:string;time?:string}[],x:number,width:number)=>{
-    ctx.font="700 9px Arial";
-    ctx.fillText(title,x,31);
-    let y=44;
-    for(const row of rows.slice(0,5)){
-      ctx.font="700 8px Arial";
-      ctx.fillText(clippedText(ctx,row.label,width-42),x,y);
-      ctx.font="8px Arial";
-      ctx.textAlign="right";
-      ctx.fillText(clippedText(ctx,row.time||"",38),x+width,y);
-      ctx.textAlign="left";
-      y+=14;
-    }
-  };
-
-  const zmanRows=(day.zmanimRows||[]).map(r=>({label:r.label,time:r.time}));
-  const scheduleRows=(day.shulScheduleRows||[]).map(r=>({label:r.label,time:r.time||""}));
-
-  drawColumn("ZMANIM",zmanRows,5,119);
-  ctx.fillRect(130,31,1,86);
-  drawColumn("SHUL",scheduleRows,137,122);
-
-  ctx.fillRect(4,121,256,1);
-  ctx.font="700 8px Arial";
-  ctx.fillText("NOTICE",5,127);
-
-  const headline=notice?.headline||day.event||"No notices today.";
-  ctx.font="700 10px Arial";
-  ctx.fillText(clippedText(ctx,headline,254),5,139);
-
-  if(notice?.details){
-    ctx.font="8px Arial";
-    ctx.fillText(clippedText(ctx,notice.details,254),5,153);
-  }
-
-  ctx.font="7px Arial";
-  ctx.textAlign="right";
-  ctx.fillText("LIVE ADMIN",259,166);
-  ctx.textAlign="left";
-
-  return canvas.toDataURL("image/png").split(",",2)[1];
-}
 
 export default function Dashboard({
   days, previewDay, notices, remainingPushes, onGoCalendar, onOpenSpecialSetup, onAddNotice,
@@ -131,7 +60,7 @@ export default function Dashboard({
     setPublishing(true);
     setPublishStatus("");
     try{
-      const imageBase64=renderBadgerPng(previewDay,liveNotice,shulName);
+      const imageBase64=magnetPngBase64({day:previewDay,notice:liveNotice,shulName,width:264,height:176});
       const {error}=await supabase.functions.invoke("publish-badger-screen",{
         body:{shul_id:shulId,image_base64:imageBase64}
       });
