@@ -41,7 +41,7 @@ function classify(item:CalendarItem):Omit<SpecialEvent,"date"|"title"|"hdate"|"h
   const t=normalizeTitle(raw);
   const isCholHamoed=/chol ha moed|ch m/.test(t);
   const isHoshana=/hoshana rab/.test(t);
-  const isFast=/tzom gedalia|asara b tevet|tevet.*fast|taanit esther|fast of esther|17th of tammuz|tzom tammuz|tisha b av|tish a b av/.test(t);
+  const isFast=/tzom gedalia|asara b ?tevet|tevet.*fast|taanit esther|fast of esther|17th of tammuz|tzom tammuz|tisha b ?av|tish a b ?av/.test(t);
 
   if(/leil selichot|selichot|selichos/.test(t)){
     return {
