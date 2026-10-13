@@ -1354,9 +1354,9 @@ export default function MonthlySetupPage({
               return (
                 <section className="monthlyDateCard" key={card.date}>
                   <div className="monthlyDateHead">
-                    <div className="monthlyHebrewDate">
-                      <strong>{card.hebrewDay}</strong>
-                      <span>{month}</span>
+                    <div className="monthlyHebrewDate" dir="rtl">
+                      <strong>{monthlyHebrewDayText(card.hebrewDay)}</strong>
+                      <span>{monthlyHebrewMonthText(month)}</span>
                     </div>
                     <div>
                       <span className="eyebrow">{monthlyEnglishDate(card.date)}</span>
@@ -1377,7 +1377,8 @@ export default function MonthlySetupPage({
                         <span>Special schedule</span>
                       </div>
                       {MONTHLY_SERVICES.map(service=>{
-                        const value=monthlyScheduleOverrides[card.date]?.[service]||"";
+                        const serviceValues=serviceOverrideValues(card.date,service);
+                        const enteredCount=serviceValues.filter(Boolean).length;
                         return (
                           <div className="monthlyServiceRow" key={service}>
                             <strong>{service}</strong>
@@ -1385,15 +1386,38 @@ export default function MonthlySetupPage({
                               <strong>{regularServiceDisplay(card.date,service)}</strong>
                               <small>What would normally run on this date</small>
                             </div>
-                            <label>
-                              <input
-                                type="time"
-                                value={value}
-                                onChange={e=>setMonthlyScheduleOverride(card.date,service,e.target.value)}
-                                aria-label={`${card.title} ${service} special time`}
-                              />
-                              <small>{value?"Using special time":"Blank = keep regular"}</small>
-                            </label>
+                            <div className="monthlySpecialTimes">
+                              {serviceValues.map((value,index)=>(
+                                <div className="monthlySpecialTimeRow" key={index}>
+                                  <input
+                                    type="time"
+                                    value={value}
+                                    onChange={e=>setMonthlyScheduleOverride(card.date,service,index,e.target.value)}
+                                    aria-label={card.title+" "+service+" special time "+(index+1)}
+                                  />
+                                  {serviceValues.length>1&&(
+                                    <button
+                                      type="button"
+                                      className="secondary monthlyRemoveTime"
+                                      onClick={()=>removeMonthlyScheduleOverride(card.date,service,index)}
+                                      aria-label={"Remove "+service+" time "+(index+1)}
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                              <div className="monthlyTimeActions">
+                                <small>{enteredCount ? enteredCount+" special time"+(enteredCount===1?"":"s")+" entered" : "Blank = keep regular schedule"}</small>
+                                <button
+                                  type="button"
+                                  className="secondary monthlyAddTime"
+                                  onClick={()=>addMonthlyScheduleOverride(card.date,service)}
+                                >
+                                  + Add {service} Time
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
@@ -1456,17 +1480,44 @@ export default function MonthlySetupPage({
                         <span>These are separate from the regular davening schedule.</span>
                       </div>
                       <div className="monthlyAdditionalGrid">
-                        {card.additional.map(field=>(
-                          <label className="monthlyAdditionalField" key={field.key}>
-                            <span>{field.label}</span>
-                            <input
-                              type="time"
-                              value={additionalValue(card.date,field.key)}
-                              onChange={e=>setAdditionalValue(card.date,field.key,e.target.value)}
-                            />
-                            {field.helpText&&<small>{field.helpText}</small>}
-                          </label>
-                        ))}
+                        {card.additional.map(field=>{
+                          const fieldValues=additionalValues(card.date,field.key);
+                          return (
+                            <div className="monthlyAdditionalField" key={field.key}>
+                              <span>{field.label}</span>
+                              {fieldValues.map((value,index)=>(
+                                <div className="monthlySpecialTimeRow" key={index}>
+                                  <input
+                                    type="time"
+                                    value={value}
+                                    onChange={e=>setAdditionalValue(card.date,field.key,index,e.target.value)}
+                                    aria-label={field.label+" time "+(index+1)}
+                                  />
+                                  {field.allowMultiple&&fieldValues.length>1&&(
+                                    <button
+                                      type="button"
+                                      className="secondary monthlyRemoveTime"
+                                      onClick={()=>removeAdditionalValue(card.date,field.key,index)}
+                                      aria-label={"Remove "+field.label+" time "+(index+1)}
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                              {field.allowMultiple&&(
+                                <button
+                                  type="button"
+                                  className="secondary monthlyAddTime monthlyAddAdditionalTime"
+                                  onClick={()=>addAdditionalValue(card.date,field.key)}
+                                >
+                                  + Add Another {field.label} Time
+                                </button>
+                              )}
+                              {field.helpText&&<small>{field.helpText}</small>}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
