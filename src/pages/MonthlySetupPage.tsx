@@ -33,12 +33,14 @@ type FocusedZmanDefaults = {
 
 type MonthlyService = "Shacharis" | "Mincha" | "Maariv";
 type MonthlyAdditionalField = {key:string;label:string;helpText?:string;allowMultiple?:boolean};
+type MonthlyCustomEvent = {id:string;label:string;time:string};
 type MonthlyDateCard = {
   date:string;
   hebrewDay:number;
   title:string;
   replaceSchedule:boolean;
   additional:MonthlyAdditionalField[];
+  isCholHamoed:boolean;
 };
 type HebrewMonthOccurrence = {
   year:string;
@@ -565,6 +567,7 @@ export default function MonthlySetupPage({
   const [focusedSavingUnit,setFocusedSavingUnit] = useState("");
 
   const [values,setValues] = useState<SpecialValues>({});
+  const [monthlyCustomEvents,setMonthlyCustomEvents] = useState<Record<string,MonthlyCustomEvent[]>>({});
 
   useEffect(()=>{
     if(!focusGroup||!shulId){
@@ -987,13 +990,15 @@ export default function MonthlySetupPage({
         existing.additional.push(...additions.filter(item=>!seen.has(item.key)));
         if(event.blocks_regular_schedule)existing.replaceSchedule=true;
         if(event.blocks_regular_schedule)existing.title=title;
+        if(event.is_chol_hamoed)existing.isCholHamoed=true;
       }else{
         byDate.set(event.date,{
           date:event.date,
           hebrewDay:parts.day,
           title,
           replaceSchedule:!lower.includes("selich"),
-          additional:additions
+          additional:additions,
+          isCholHamoed:Boolean(event.is_chol_hamoed)
         });
       }
     }
@@ -1011,7 +1016,8 @@ export default function MonthlySetupPage({
           hebrewDay:item.day,
           title:item.title,
           replaceSchedule:false,
-          additional:item.additional
+          additional:item.additional,
+          isCholHamoed:false
         });
       }
     }
@@ -1056,6 +1062,36 @@ export default function MonthlySetupPage({
       const next=(current[mapKey]||[""]).filter((_,i)=>i!==index);
       return {...current,[mapKey]:next.length?next:[""]};
     });
+  };
+
+  const customEventsForDate=(date:string)=>monthlyCustomEvents[date]||[];
+
+  const addMonthlyCustomEvent=(date:string)=>{
+    setMonthlyCustomEvents(current=>({
+      ...current,
+      [date]:[
+        ...(current[date]||[]),
+        {
+          id:`${date}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          label:month==="Tishrei"?"Simchas Beis Hashoeva":"",
+          time:""
+        }
+      ]
+    }));
+  };
+
+  const updateMonthlyCustomEvent=(date:string,id:string,field:"label"|"time",value:string)=>{
+    setMonthlyCustomEvents(current=>({
+      ...current,
+      [date]:(current[date]||[]).map(item=>item.id===id?{...item,[field]:value}:item)
+    }));
+  };
+
+  const removeMonthlyCustomEvent=(date:string,id:string)=>{
+    setMonthlyCustomEvents(current=>({
+      ...current,
+      [date]:(current[date]||[]).filter(item=>item.id!==id)
+    }));
   };
 
   const serviceOverrideValues=(date:string,service:MonthlyService)=>{
@@ -1242,6 +1278,19 @@ export default function MonthlySetupPage({
             additionalSort+=10;
           }
         });
+
+        for(const customEvent of customEventsForDate(card.date)){
+          const label=customEvent.label.trim();
+          if(!label||!customEvent.time)continue;
+          rows.push({
+            title:label,
+            event_time:customEvent.time,
+            approximate:false,
+            note:null,
+            sort_order:additionalSort
+          });
+          additionalSort+=10;
+        }
 
         return {
           event_date:card.date,
@@ -1469,6 +1518,62 @@ export default function MonthlySetupPage({
                         >
                           Use Automatic Fast Times
                         </button>
+                      )}
+                    </div>
+                  )}
+
+                  {card.isCholHamoed&&(
+                    <div className="monthlyAdditionalBlock monthlySpecialEventsBlock">
+                      <div className="monthlyAdditionalHead">
+                        <strong>Special events</strong>
+                        <span>Add an event that happens on this Chol Hamoed date without changing the davening schedule.</span>
+                      </div>
+
+                      {customEventsForDate(card.date).length>0&&(
+                        <div className="monthlyCustomEventList">
+                          {customEventsForDate(card.date).map(event=>(
+                            <div className="monthlyCustomEventRow" key={event.id}>
+                              <label>
+                                <span>Event</span>
+                                <input
+                                  list={month==="Tishrei"?"tishrei-special-event-suggestions":undefined}
+                                  value={event.label}
+                                  placeholder="Special event"
+                                  onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"label",e.target.value)}
+                                />
+                              </label>
+                              <label>
+                                <span>Time</span>
+                                <input
+                                  type="time"
+                                  value={event.time}
+                                  onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"time",e.target.value)}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="secondary monthlyRemoveTime"
+                                onClick={()=>removeMonthlyCustomEvent(card.date,event.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="secondary monthlyAddTime monthlyAddSpecialEvent"
+                        onClick={()=>addMonthlyCustomEvent(card.date)}
+                      >
+                        + Add Special Event
+                      </button>
+
+                      {month==="Tishrei"&&(
+                        <datalist id="tishrei-special-event-suggestions">
+                          <option value="Simchas Beis Hashoeva" />
+                        </datalist>
                       )}
                     </div>
                   )}
