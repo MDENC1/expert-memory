@@ -5,7 +5,6 @@ import { jewishMonthTemplates } from "../data/mock";
 import { supabase } from "../lib/supabase";
 
 type SpecialValues = Record<string,string>;
-type FastEndRule = 42 | 60 | 72;
 type FastOverride = {start?:string;end?:string};
 type FocusedScheduleRow = {
   label:string;
@@ -20,6 +19,7 @@ type FocusedSpecialUnit = {
 };
 type FocusedZmanimBatch = {
   sunset?:Record<string,string>;
+  candleLighting?:Record<string,string>;
   plagHaMincha?:Record<string,string>;
   sources?:Record<string,Record<string,string>>;
 };
@@ -31,14 +31,158 @@ type FocusedZmanDefaults = {
   nightfall:string;
 };
 
-const fastDays = [
-  {key:"gedalia",month:"Tishrei",name:"Tzom Gedalia",startSource:"MyZmanim Alos",autoStart:"5:34 AM",sunsetMinutes:19*60+1},
-  {key:"yom_kippur",month:"Tishrei",name:"Yom Kippur",startSource:"MyZmanim sunset / candle-lighting",autoStart:"6:43 PM",sunsetMinutes:18*60+58},
-  {key:"teves",month:"Teves",name:"Asarah B'Teves",startSource:"MyZmanim Alos",autoStart:"6:12 AM",sunsetMinutes:17*60+7},
-  {key:"esther",month:"Adar",name:"Taanis Esther",startSource:"MyZmanim Alos",autoStart:"5:31 AM",sunsetMinutes:18*60+39},
-  {key:"tammuz",month:"Tammuz",name:"17 Tammuz",startSource:"MyZmanim Alos",autoStart:"4:31 AM",sunsetMinutes:20*60+51},
-  {key:"tisha_bav",month:"Av",name:"Tisha B'Av",startSource:"MyZmanim sunset",autoStart:"8:48 PM",sunsetMinutes:20*60+45}
-];
+type MonthlyService = "Shacharis" | "Mincha" | "Maariv";
+type MonthlyAdditionalField = {key:string;label:string;helpText?:string};
+type MonthlyDateCard = {
+  date:string;
+  hebrewDay:number;
+  title:string;
+  replaceSchedule:boolean;
+  additional:MonthlyAdditionalField[];
+};
+type HebrewMonthOccurrence = {
+  year:string;
+  start:string;
+  end:string;
+  datesByDay:Record<number,string>;
+};
+
+const MONTHLY_SERVICES:MonthlyService[]=["Shacharis","Mincha","Maariv"];
+
+const STATIC_MONTHLY_DATES:Record<string,Array<{
+  day:number;
+  title:string;
+  additional:MonthlyAdditionalField[];
+}>>={
+  Kislev:[
+    {day:25,title:"Chanukah",additional:[{key:"chanukah_lighting",label:"Menorah Lighting"}]}
+  ],
+  Shevat:[
+    {day:15,title:"Tu B'Shvat",additional:[{key:"tu_bishvat_event",label:"Tu B'Shvat Program"}]}
+  ],
+  Iyar:[
+    {day:18,title:"Lag B'Omer",additional:[{key:"lag_baomer",label:"Lag B'Omer Program"}]}
+  ]
+};
+
+function normalizeHebrewMonthName(value:string){
+  const month=value.trim();
+  const aliases:Record<string,string>={
+    Tishri:"Tishrei",
+    Heshvan:"Cheshvan",
+    Marcheshvan:"Cheshvan",
+    Tevet:"Teves",
+    Nisan:"Nissan",
+    Tamuz:"Tammuz",
+    "Adar II":"Adar"
+  };
+  return aliases[month]||month;
+}
+
+function hebrewPartsForDate(date:Date){
+  const parts=new Intl.DateTimeFormat("en-u-ca-hebrew",{
+    day:"numeric",
+    month:"long",
+    year:"numeric"
+  }).formatToParts(date);
+  const day=Number(parts.find(part=>part.type==="day")?.value||0);
+  const month=parts.find(part=>part.type==="month")?.value||"";
+  const year=parts.find(part=>part.type==="year")?.value||"";
+  return {day,month,year};
+}
+
+function findHebrewMonthOccurrence(month:string):HebrewMonthOccurrence|null{
+  const today=new Date();
+  today.setHours(12,0,0,0);
+  const scanStart=new Date(today);
+  scanStart.setDate(scanStart.getDate()-35);
+  const scanEnd=new Date(today);
+  scanEnd.setDate(scanEnd.getDate()+400);
+
+  const groups=new Map<string,Array<{date:string;day:number;rawMonth:string;year:string}>>();
+  for(let cursor=new Date(scanStart);cursor<=scanEnd;cursor.setDate(cursor.getDate()+1)){
+    const parts=hebrewPartsForDate(cursor);
+    const normalized=normalizeHebrewMonthName(parts.month);
+    if(normalized!==month)continue;
+    // Purim belongs to Adar II in a leap year, not Adar I.
+    if(month==="Adar"&&parts.month==="Adar I")continue;
+    const date=focusedIsoDate(cursor);
+    const key=`${parts.year}|${parts.month}`;
+    groups.set(key,[...(groups.get(key)||[]),{date,day:parts.day,rawMonth:parts.month,year:parts.year}]);
+  }
+
+  const occurrences=[...groups.values()]
+    .filter(group=>group.length)
+    .sort((a,b)=>a[0].date.localeCompare(b[0].date));
+
+  const todayIso=focusedIsoDate(today);
+  const selected=occurrences.find(group=>group[group.length-1].date>=todayIso)||occurrences[0];
+  if(!selected)return null;
+
+  return {
+    year:selected[0].year,
+    start:selected[0].date,
+    end:selected[selected.length-1].date,
+    datesByDay:Object.fromEntries(selected.map(item=>[item.day,item.date]))
+  };
+}
+
+function monthlyEnglishDate(date:string){
+  return new Intl.DateTimeFormat("en-US",{
+    weekday:"long",
+    month:"long",
+    day:"numeric",
+    year:"numeric"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+function monthlyAdditionalFields(title:string):MonthlyAdditionalField[]{
+  const t=title.toLowerCase();
+  const fields:MonthlyAdditionalField[]=[];
+  if(t.includes("rosh hashana"))fields.push({key:"shofar",label:"Shofar"});
+  if(t.includes("yom kippur")){
+    fields.push(
+      {key:"kol_nidrei",label:"Kol Nidrei"},
+      {key:"yizkor",label:"Yizkor"},
+      {key:"neilah",label:"Neilah"}
+    );
+  }
+  if(t.includes("shemini atzer"))fields.push({key:"yizkor",label:"Yizkor"});
+  if(t.includes("simchat torah")||t.includes("simchas torah")){
+    fields.push(
+      {key:"hakafos_night",label:"Hakafos - Night"},
+      {key:"hakafos_day",label:"Hakafos - Day"}
+    );
+  }
+  if(t.includes("purim")&&!t.includes("katan")){
+    fields.push(
+      {key:"megillah_night",label:"Megillah - Night"},
+      {key:"megillah_day",label:"Megillah - Day"}
+    );
+  }
+  if(t.includes("selich")){
+    fields.push({key:"selichos",label:"Selichos"});
+  }
+  if(t.includes("erev pesach")){
+    fields.push(
+      {key:"siyum_bechorim",label:"Siyum Bechorim"},
+      {key:"chametz_stop",label:"Stop Eating Chametz"},
+      {key:"chametz_burn",label:"Burn / Sell Chametz By"}
+    );
+  }
+  if(t.includes("shavuot")||t.includes("shavuos")){
+    if(!/ii|2/.test(t))fields.push({key:"shavuos_learning",label:"Shavuos Night Learning"});
+    if(/ii|2/.test(t))fields.push({key:"shavuos_yizkor",label:"Yizkor"});
+  }
+  if(t.includes("pesach")&&(/viii|8/.test(t)))fields.push({key:"pesach_yizkor",label:"Yizkor"});
+  if(t.includes("tisha b")||t.includes("tish'a b"))fields.push({key:"eicha",label:"Eicha"});
+  return fields;
+}
+
+function monthlyIsFast(title:string){
+  const t=title.toLowerCase();
+  return /tzom gedalia|asara b|tevet|taanit esther|fast of esther|17th of tammuz|tzom tammuz|tisha b|tish'a b|yom kippur/.test(t);
+}
 
 function formatMinutes(total:number) {
   const normalized=((total%1440)+1440)%1440;
