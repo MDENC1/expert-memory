@@ -2108,7 +2108,7 @@ body{color:#172b26}
 }
 .monthlyCustomEventRow{
   display:grid;
-  grid-template-columns:minmax(220px,1.4fr) minmax(150px,.7fr) auto;
+  grid-template-columns:minmax(190px,1.2fr) minmax(120px,.55fr) minmax(180px,1fr) minmax(240px,1.35fr) auto;
   gap:10px;
   align-items:end;
 }
@@ -2121,9 +2121,14 @@ body{color:#172b26}
   font-weight:850;
   color:#334742;
 }
-.monthlyCustomEventRow input{
+.monthlyCustomEventRow input,
+.monthlyCustomEventRow textarea{
   width:100%;
   min-height:40px;
+}
+.monthlyCustomEventRow textarea{
+  resize:vertical;
+  min-height:64px;
 }
 .monthlyAddSpecialEvent{
   justify-self:start;
@@ -2333,7 +2338,7 @@ body{color:#172b26}
 }
 .monthlyChanukahLightingRow{
   display:grid;
-  grid-template-columns:minmax(280px,1fr) minmax(130px,180px) auto;
+  grid-template-columns:minmax(240px,1.15fr) minmax(120px,.5fr) minmax(190px,.95fr) minmax(260px,1.35fr) auto;
   gap:10px;
   align-items:end;
   padding:10px;
@@ -2351,13 +2356,31 @@ body{color:#172b26}
   color:#536a63;
 }
 .monthlyChanukahLightingRow select,
-.monthlyChanukahLightingRow input{
+.monthlyChanukahLightingRow input,
+.monthlyChanukahLightingRow textarea{
   min-height:40px;
   border:1px solid #cbdcd6;
   border-radius:8px;
   padding:8px 10px;
   background:#fff;
   color:#20312d;
+}
+.monthlyChanukahLightingRow textarea{
+  resize:vertical;
+  min-height:64px;
+}
+.monthlySpecialEventDetails small{
+  font-weight:600;
+  color:#7b8a85;
+}
+@media(max-width:1120px){
+  .monthlyChanukahLightingRow,
+  .monthlyCustomEventRow{
+    grid-template-columns:1fr 180px 1fr;
+  }
+  .monthlySpecialEventDetails{
+    grid-column:1 / -1;
+  }
 }
 @media(max-width:760px){
   .monthlyChanukahLightingRow{
