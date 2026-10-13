@@ -1424,8 +1424,21 @@ body{color:#172b26}
 
 
 /* Calendar scan states */
-.dayCell.today{box-shadow:inset 0 0 0 2px #2f7d6d}
-.dayCell.today.selected{box-shadow:inset 0 0 0 3px #2f7d6d}
+.dayCell.today{
+  position:relative;
+  border:3px solid #2f7d6d!important;
+  background:#f0faf6;
+  box-shadow:0 0 0 2px rgba(47,125,109,.14);
+}
+.dayCell.today.selected{
+  outline:3px solid #183f36;
+  outline-offset:-6px;
+  box-shadow:0 0 0 2px rgba(47,125,109,.18);
+}
+.dayCell.today .dateTop strong{
+  font-size:24px;
+  color:#173f36;
+}
 .todayTag,.manualOverrideTag,.specialConfirmedTag{
   display:inline-block;
   border-radius:999px;
@@ -1433,6 +1446,11 @@ body{color:#172b26}
   font-size:9px;
   font-weight:900;
 }
-.todayTag{background:#dff1ea;color:#27594c}
+.todayTag{
+  background:#2f7d6d;
+  color:#fff;
+  letter-spacing:.06em;
+  padding:5px 9px;
+}
 .manualOverrideTag{background:#fff1d6;color:#6a4a12}
 .specialConfirmedTag{background:#ece8f8;color:#51427d}
