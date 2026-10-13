@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CalendarDay, Notice, NoticeType } from "../types";
+import type { CalendarDay, Notice, NoticeType, RecurrenceFrequency } from "../types";
 import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
@@ -14,6 +14,8 @@ type Props = {
   locationId: string;
   shulId: string;
   focusDate?: string;
+  remainingPushes: number;
+  usePush: () => void;
 };
 
 type MonthCell = {
@@ -66,6 +68,15 @@ const DEFAULT_ZMAN_DEFAULTS:ZmanDefaults={
   mincha:"gra",
   nightfall:"gra"
 };
+
+const noticeTypes:NoticeType[]=[
+  "Yahrtzeit","Sponsorship","Mazel Tov","Condolence / Shiva",
+  "Schedule Change","Event","General Notice"
+];
+const recurringTypes=new Set<NoticeType>(["Yahrtzeit","Sponsorship","Schedule Change","Event","General Notice"]);
+const weekdayOptions=[
+  ["Sun",0],["Mon",1],["Tue",2],["Wed",3],["Thu",4],["Fri",5],["Shabbos",6]
+] as const;
 
 function sourceFromShulDefault(family:string,defaults:ZmanDefaults){
   if(family==="dawn")return defaults.dawn==="ben_ish" ? "dawn_benish" : "dawn_72fix";
@@ -227,15 +238,22 @@ function noticeMatchesDate(notice:Notice,date:string) {
   return true;
 }
 
-export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId,focusDate=""}:Props) {
+export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId,focusDate="",remainingPushes,usePush}:Props) {
   const [viewDate,setViewDate] = useState(new Date());
   const [multiMode,setMultiMode] = useState(false);
   const [selected,setSelected] = useState<string[]>([]);
   const [showAdd,setShowAdd] = useState(false);
-  const [newType,setNewType] = useState<NoticeType>("Event");
+  const [newType,setNewType] = useState<NoticeType>("General Notice");
   const [newHeadline,setNewHeadline] = useState("");
   const [newDetails,setNewDetails] = useState("");
   const [newTime,setNewTime] = useState("");
+  const [newStartAt,setNewStartAt] = useState("");
+  const [newEndAt,setNewEndAt] = useState("");
+  const [newRecurring,setNewRecurring] = useState(false);
+  const [newFrequency,setNewFrequency] = useState<RecurrenceFrequency>("weekly");
+  const [newWeekdays,setNewWeekdays] = useState<number[]>([]);
+  const [newMonthDays,setNewMonthDays] = useState<number[]>([]);
+  const [savingContent,setSavingContent] = useState(false);
   const [specialDays,setSpecialDays] = useState<SpecialDay[]>([]);
   const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
   const [loading,setLoading] = useState(false);
@@ -1172,22 +1190,88 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setSavingDay(false);
   };
 
-  const addToSelectedDates=async()=>{
-    if (!selected.length || !newHeadline.trim()) return;
-    const payload=selected.map(date=>({
-      shul_id:shulId,
-      content_type:newType,
-      title:newHeadline.trim(),
-      details:newDetails.trim()||null,
-      display_start:date,
-      display_end:date,
-      event_time:(newType==="Event" || newType==="Schedule Change") && newTime ? (displayTimeTo24(newTime)||null) : null,
-      recurring:false,
-      active:true,
-      priority_level:2
-    }));
+  const canNewContentRecur=recurringTypes.has(newType)&&selected.length===1;
+  const newContentNeedsTime=newType==="Event"||newType==="Schedule Change";
+  const recurrenceSummary=useMemo(()=>{
+    if(!newRecurring||!canNewContentRecur)return "";
+    if(newFrequency==="daily")return "Daily";
+    if(newFrequency==="weekly"){
+      return `Weekly: ${newWeekdays.map(day=>weekdayOptions.find(option=>option[1]===day)?.[0]).filter(Boolean).join(", ")||"choose day(s)"}`;
+    }
+    if(newFrequency==="monthly")return `Monthly: day ${newMonthDays.join(", ")||"—"}`;
+    return "Yearly on Hebrew date";
+  },[newRecurring,canNewContentRecur,newFrequency,newWeekdays,newMonthDays]);
+
+  const toggleNewWeekday=(day:number)=>setNewWeekdays(value=>value.includes(day)?value.filter(item=>item!==day):[...value,day].sort());
+  const toggleNewMonthDay=(day:number)=>setNewMonthDays(value=>value.includes(day)?value.filter(item=>item!==day):[...value,day].sort((a,b)=>a-b));
+
+  const openAddModal=()=>{
+    if(!selected.length)return;
+    const sorted=[...selected].sort();
+    setNewType("General Notice");
+    setNewHeadline("");
+    setNewDetails("");
+    setNewTime("");
+    setNewStartAt(sorted[0]);
+    setNewEndAt(sorted[sorted.length-1]);
+    setNewRecurring(false);
+    setNewFrequency("weekly");
+    setNewWeekdays([]);
+    setNewMonthDays([]);
+    setShowAdd(true);
+  };
+
+  const addToSelectedDates=async(mode:"scheduled"|"immediate")=>{
+    if(!selected.length||!newHeadline.trim())return;
+    if(mode==="immediate"&&remainingPushes<=0)return;
+
+    setSavingContent(true);
+    setError("");
+
+    const recurring=canNewContentRecur&&newRecurring;
+    const eventTime=newContentNeedsTime&&newTime ? (displayTimeTo24(newTime)||null) : null;
+
+    const payload=selected.length===1
+      ? [{
+          shul_id:shulId,
+          content_type:newType,
+          title:newHeadline.trim(),
+          details:newDetails.trim()||null,
+          display_start:newStartAt||selected[0],
+          display_end:newEndAt||selected[0],
+          event_time:eventTime,
+          recurring,
+          recurrence_type:recurring?newFrequency:null,
+          recurrence_weekdays:recurring&&newFrequency==="weekly"?newWeekdays:[],
+          recurrence_month_days:recurring&&newFrequency==="monthly"?newMonthDays:[],
+          active:true,
+          priority_level:2,
+          immediate_sent_at:mode==="immediate"?new Date().toISOString():null
+        }]
+      : selected.map(date=>({
+          shul_id:shulId,
+          content_type:newType,
+          title:newHeadline.trim(),
+          details:newDetails.trim()||null,
+          display_start:date,
+          display_end:date,
+          event_time:eventTime,
+          recurring:false,
+          recurrence_type:null,
+          recurrence_weekdays:[],
+          recurrence_month_days:[],
+          active:true,
+          priority_level:2,
+          immediate_sent_at:mode==="immediate"?new Date().toISOString():null
+        }));
+
     const {data,error}=await supabase.from("notices_events").insert(payload).select("*");
-    if(error){setError(error.message);return;}
+    if(error){
+      setError(error.message);
+      setSavingContent(false);
+      return;
+    }
+
     const additions:Notice[]=(data||[]).map((row:any)=>({
       id:row.id,
       type:row.content_type,
@@ -1195,14 +1279,29 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       details:row.details||"",
       startAt:row.display_start,
       endAt:row.display_end,
-      eventTime:row.event_time||undefined,
-      recurrence:{enabled:false},
-      priority:"important",
-      publishMode:"scheduled",
-      status:"scheduled"
+      eventTime:row.event_time?prettyTime(row.event_time):undefined,
+      recurrence:{
+        enabled:Boolean(row.recurring),
+        frequency:row.recurrence_type||undefined,
+        weekdays:row.recurrence_weekdays||[],
+        monthDays:row.recurrence_month_days||[]
+      },
+      priority:"normal",
+      publishMode:mode,
+      status:mode==="immediate"?"live":"scheduled"
     }));
+
     setNotices([...additions,...notices]);
-    setNewHeadline("");setNewDetails("");setNewTime("");setShowAdd(false);
+    if(mode==="immediate")usePush();
+
+    setNewHeadline("");
+    setNewDetails("");
+    setNewTime("");
+    setNewRecurring(false);
+    setNewWeekdays([]);
+    setNewMonthDays([]);
+    setShowAdd(false);
+    setSavingContent(false);
   };
 
   return (
@@ -1234,7 +1333,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
         <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet.")}</span>
         {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>}
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
-        {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
+        {selected.length>0 && <button className="primary" onClick={openAddModal}>+ Add Event / Notice</button>}
       </div>
 
       <div className="calendarLayout">
@@ -1345,7 +1444,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   )}
                 </div>
                 {daySaveMessage&&<div className="daySaveMessage">{daySaveMessage}</div>}
-                <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to This Day</button>
+                <button className="secondary fullButton" onClick={openAddModal}>+ Add Event / Notice to This Day</button>
               </div>
               <MagnetPreview day={selectedCalendarDay} notice={previewNotice} shulName={shulName} fit />
             </>
@@ -1413,7 +1512,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                 </div>
               )}
               {bulkSaveMessage&&<div className="daySaveMessage">{bulkSaveMessage}</div>}
-              <button className="secondary fullButton" onClick={()=>setShowAdd(true)}>+ Add Event / Notice to Selected Days</button>
+              <button className="secondary fullButton" onClick={openAddModal}>+ Add Event / Notice to Selected Days</button>
             </div>
           ) : (
             <div className="panel emptyPreview"><strong>Select a day</strong><span>Edit its schedule here and see exactly what the magnet will display.</span></div>
@@ -1424,38 +1523,36 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       {showAdd && selected.length>0 && (
         <div className="calendarModalBackdrop" onMouseDown={()=>setShowAdd(false)}>
           <div
-            className="calendarModal"
+            className="calendarModal calendarContentModal"
             role="dialog"
             aria-modal="true"
-            aria-label="Add event or notice"
+            aria-label="Add notice or event"
             onMouseDown={e=>e.stopPropagation()}
           >
             <div className="panelHead calendarModalHead">
               <div>
-                <span className="eyebrow">Add Event / Notice</span>
-                <h2>
+                <span className="eyebrow">New content</span>
+                <h2>Add Notice or Event</h2>
+                <p className="calendarModalContext">
                   {selected.length===1
-                    ? new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selected[0]}T12:00:00`))
-                    : `${selected.length} selected days`}
-                </h2>
+                    ? `From Calendar · ${new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date(`${selected[0]}T12:00:00`))}`
+                    : `From Calendar · ${selected.length} selected days`}
+                </p>
               </div>
-              <button className="secondary" onClick={()=>setShowAdd(false)}>Close</button>
+              <button className="calendarModalClose" aria-label="Close" onClick={()=>setShowAdd(false)}>×</button>
             </div>
 
-            <div className="formGrid">
+            <div className="formGrid calendarContentGrid">
               <label>
                 Type
-                <select value={newType} onChange={e=>setNewType(e.target.value as NoticeType)}>
-                  <option>Event</option>
-                  <option>Schedule Change</option>
-                  <option>General Notice</option>
-                  <option>Sponsorship</option>
-                  <option>Yahrtzeit</option>
+                <select value={newType} onChange={e=>{setNewType(e.target.value as NoticeType);setNewRecurring(false);}}>
+                  {noticeTypes.map(type=><option key={type}>{type}</option>)}
                 </select>
               </label>
-              {(newType==="Event" || newType==="Schedule Change") && (
+
+              {newContentNeedsTime && (
                 <label>
-                  Time
+                  Event / schedule time
                   <input
                     type="text"
                     inputMode="text"
@@ -1467,21 +1564,91 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                   <small>Type 725pm → 7:25 PM</small>
                 </label>
               )}
+
+              {selected.length===1&&(
+                <>
+                  <label>
+                    Display start date
+                    <input type="date" value={newStartAt} onChange={e=>setNewStartAt(e.target.value)} />
+                  </label>
+                  <label>
+                    Display end date
+                    <input type="date" value={newEndAt} onChange={e=>setNewEndAt(e.target.value)} />
+                  </label>
+                </>
+              )}
             </div>
+
+            {selected.length>1&&(
+              <div className="calendarSelectedDatesNote">
+                This content will be added only to the {selected.length} dates you selected.
+              </div>
+            )}
 
             <label className="calendarModalField">
               Headline
-              <input autoFocus value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="e.g. Daf Yomi Shiur" />
+              <input autoFocus value={newHeadline} onChange={e=>setNewHeadline(e.target.value)} placeholder="Short headline" />
             </label>
             <label className="calendarModalField">
               Details
-              <textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="Optional details" />
+              <textarea value={newDetails} onChange={e=>setNewDetails(e.target.value)} placeholder="What should members see?" />
             </label>
 
+            {canNewContentRecur&&(
+              <div className="recurrenceBox calendarRecurrenceBox">
+                <label className="checkRow">
+                  <input type="checkbox" checked={newRecurring} onChange={e=>setNewRecurring(e.target.checked)} />
+                  <span>
+                    <strong>Recurring?</strong>
+                    <small>Set this once instead of recreating the notice or event.</small>
+                  </span>
+                </label>
+
+                {newRecurring&&(
+                  <>
+                    <label className="calendarRecurrenceField">
+                      Repeats
+                      <select value={newFrequency} onChange={e=>setNewFrequency(e.target.value as RecurrenceFrequency)}>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        {newType==="Yahrtzeit"&&<option value="yearly_hebrew">Yearly on Hebrew date</option>}
+                      </select>
+                    </label>
+
+                    {newFrequency==="weekly"&&(
+                      <div className="choiceRow">
+                        {weekdayOptions.map(([label,day])=>(
+                          <button type="button" key={day} className={newWeekdays.includes(day)?"choice active":"choice"} onClick={()=>toggleNewWeekday(day)}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {newFrequency==="monthly"&&(
+                      <div className="monthDayGrid calendarMonthDayGrid">
+                        {Array.from({length:31},(_,index)=>index+1).map(day=>(
+                          <button type="button" key={day} className={newMonthDays.includes(day)?"choice active":"choice"} onClick={()=>toggleNewMonthDay(day)}>
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="recurrenceSummary">{recurrenceSummary}</div>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="formActions calendarModalActions">
-              <button className="secondary" onClick={()=>setShowAdd(false)}>Cancel</button>
-              <button className="primary" onClick={addToSelectedDates} disabled={!newHeadline.trim()}>
-                Add to Selected Date{selected.length===1?"":"s"}
+              <button className="secondary" disabled={savingContent} onClick={()=>setShowAdd(false)}>Cancel</button>
+              <button className="secondary" disabled={savingContent||!newHeadline.trim()} onClick={()=>addToSelectedDates("scheduled")}>
+                {savingContent?"Saving…":"Save for regular update"}
+              </button>
+              <button className="primary" disabled={savingContent||!newHeadline.trim()||remainingPushes<=0} onClick={()=>addToSelectedDates("immediate")}>
+                Send to Magnets Now ({remainingPushes} left)
               </button>
             </div>
           </div>
