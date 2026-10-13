@@ -234,6 +234,15 @@ function defaultRecurrenceEnd(date:string){
   return isoDate(d);
 }
 
+function visibleSpecialNote(note:string|null|undefined){
+  const value=(note||"").trim();
+  return value==="monthly_custom_event" ? "" : value;
+}
+
+function isInternalSpecialDayTitle(title:string|null|undefined){
+  return !title || /^(tishrei schedule|monthly special event)$/i.test(title.trim());
+}
+
 function noticeMatchesDate(notice:Notice,date:string) {
   if(date<notice.startAt||date>notice.endAt)return false;
   if(notice.recurrence?.excludedDates?.includes(date))return false;
@@ -855,7 +864,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       const specialRows=rows.map(r=>({
         label:r.title,
         time:specialResolvedTime(date,special,r),
-        note:r.note||""
+        note:visibleSpecialNote(r.note)
       }));
       if(special.replace_normal_schedule)return specialRows;
       return [...regularRowsForDate(date),...specialRows];
@@ -935,7 +944,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     dafYomi:hebcalDafYomi[selectedCell.date],
     isRoshChodesh:selectedCell.isRoshChodesh,
     isShabbos:selectedCell.isShabbos,
-    holiday:(selectedSpecial?.title && !/^tishrei schedule$/i.test(selectedSpecial.title)
+    holiday:(selectedSpecial?.title && !isInternalSpecialDayTitle(selectedSpecial.title)
       ? selectedSpecial.title
       : selectedHebcalEvent?.title),
     specialTimes:keyTimesForDate(selectedCell.date),
@@ -1584,7 +1593,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               const hasConfirmedSpecial=Boolean(special?.confirmed_at);
               const hebcalEvent=primaryHebcalEvent(cell.date);
               const missingSpecial=Boolean(blockingHebcalEvent(cell.date))&&!dateHasConfiguredSpecialSchedule(cell.date);
-              const holiday=special?.title && !/^tishrei schedule$/i.test(special.title)
+              const holiday=special?.title && !isInternalSpecialDayTitle(special.title)
                 ? special.title
                 : hebcalEvent?.title;
               return (
