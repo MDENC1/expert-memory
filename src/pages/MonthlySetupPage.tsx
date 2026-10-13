@@ -93,39 +93,50 @@ function hebrewPartsForDate(date:Date){
   return {day,month,year};
 }
 
-function findHebrewMonthOccurrence(month:string):HebrewMonthOccurrence|null{
+function currentHebrewYear(){
   const today=new Date();
   today.setHours(12,0,0,0);
-  const scanStart=new Date(today);
-  scanStart.setDate(scanStart.getDate()-35);
-  const scanEnd=new Date(today);
-  scanEnd.setDate(scanEnd.getDate()+400);
+  const raw=hebrewPartsForDate(today).year;
+  const parsed=Number(raw.replace(/[^0-9]/g,""));
+  return Number.isFinite(parsed)&&parsed>0?parsed:5787;
+}
 
-  const groups=new Map<string,Array<{date:string;day:number;rawMonth:string;year:string}>>();
+function findHebrewMonthOccurrence(month:string,targetYear:number):HebrewMonthOccurrence|null{
+  const today=new Date();
+  today.setHours(12,0,0,0);
+
+  // Scan far enough in both directions to cover the full current Hebrew year
+  // and the entire following Hebrew year. The selected year, not "next occurrence",
+  // determines which month is returned.
+  const scanStart=new Date(today);
+  scanStart.setDate(scanStart.getDate()-430);
+  const scanEnd=new Date(today);
+  scanEnd.setDate(scanEnd.getDate()+800);
+
+  const matches:Array<{date:string;day:number;rawMonth:string;year:string}>=[];
   for(let cursor=new Date(scanStart);cursor<=scanEnd;cursor.setDate(cursor.getDate()+1)){
     const parts=hebrewPartsForDate(cursor);
     const normalized=normalizeHebrewMonthName(parts.month);
+    if(Number(parts.year)!==targetYear)continue;
     if(normalized!==month)continue;
     // Purim belongs to Adar II in a leap year, not Adar I.
     if(month==="Adar"&&parts.month==="Adar I")continue;
-    const date=focusedIsoDate(cursor);
-    const key=`${parts.year}|${parts.month}`;
-    groups.set(key,[...(groups.get(key)||[]),{date,day:parts.day,rawMonth:parts.month,year:parts.year}]);
+    matches.push({
+      date:focusedIsoDate(cursor),
+      day:parts.day,
+      rawMonth:parts.month,
+      year:parts.year
+    });
   }
 
-  const occurrences=[...groups.values()]
-    .filter(group=>group.length)
-    .sort((a,b)=>a[0].date.localeCompare(b[0].date));
-
-  const todayIso=focusedIsoDate(today);
-  const selected=occurrences.find(group=>group[group.length-1].date>=todayIso)||occurrences[0];
-  if(!selected)return null;
+  if(!matches.length)return null;
+  matches.sort((a,b)=>a.date.localeCompare(b.date));
 
   return {
-    year:selected[0].year,
-    start:selected[0].date,
-    end:selected[selected.length-1].date,
-    datesByDay:Object.fromEntries(selected.map(item=>[item.day,item.date]))
+    year:String(targetYear),
+    start:matches[0].date,
+    end:matches[matches.length-1].date,
+    datesByDay:Object.fromEntries(matches.map(item=>[item.day,item.date]))
   };
 }
 
@@ -562,6 +573,7 @@ export default function MonthlySetupPage({
   onSpecialSchedulesChanged?:()=>void;
 }) {
   const [month,setMonth] = useState("Tishrei");
+  const [planNextYear,setPlanNextYear] = useState(false);
   const [status,setStatus] = useState("");
   const [fastOverrides,setFastOverrides] = useState<Record<string,FastOverride>>({});
   const [monthlyScheduleOverrides,setMonthlyScheduleOverrides] = useState<Record<string,Partial<Record<MonthlyService,string[]>>>>({});
@@ -885,7 +897,11 @@ export default function MonthlySetupPage({
   };
 
 
-  const monthOccurrence=useMemo(()=>findHebrewMonthOccurrence(month),[month]);
+  const activeHebrewYear=useMemo(()=>currentHebrewYear()+(planNextYear?1:0),[planNextYear]);
+  const monthOccurrence=useMemo(
+    ()=>findHebrewMonthOccurrence(month,activeHebrewYear),
+    [month,activeHebrewYear]
+  );
 
   useEffect(()=>{
     if(focusGroup||!monthOccurrence){
