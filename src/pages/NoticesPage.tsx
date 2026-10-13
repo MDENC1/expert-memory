@@ -63,6 +63,8 @@ function noticeFromRow(row:any,existing?:Notice):Notice{
     type:row.content_type,
     headline:row.title,
     details:row.details||"",
+    location:row.location||undefined,
+    linkedSpecialEventKey:row.linked_special_event_key||undefined,
     startAt:row.display_start,
     endAt:row.display_end,
     eventTime:row.event_time?prettyTime(row.event_time):undefined,
@@ -94,6 +96,7 @@ export default function NoticesPage({
   const [type,setType] = useState<NoticeType>("General Notice");
   const [headline,setHeadline] = useState("");
   const [details,setDetails] = useState("");
+  const [location,setLocation] = useState("");
   const [startAt,setStartAt] = useState(today);
   const [endAt,setEndAt] = useState(today);
   const [eventTime,setEventTime] = useState("");
@@ -110,8 +113,9 @@ export default function NoticesPage({
   const editingNotice=editingNoticeId
     ?notices.find(notice=>notice.id===editingNoticeId)
     :undefined;
+  const isLinkedSpecialEvent=Boolean(editingNotice?.linkedSpecialEventKey);
 
-  const canRecur = recurringTypes.has(type);
+  const canRecur = !isLinkedSpecialEvent&&recurringTypes.has(type);
   const needsTime = type === "Event" || type === "Schedule Change";
   const recurrenceSummary = useMemo(() => {
     if (!recurring || !canRecur) return "";
@@ -125,6 +129,7 @@ export default function NoticesPage({
     setType("General Notice");
     setHeadline("");
     setDetails("");
+    setLocation("");
     setStartAt(today);
     setEndAt(today);
     setEventTime("");
@@ -148,6 +153,7 @@ export default function NoticesPage({
     setType(notice.type);
     setHeadline(notice.headline);
     setDetails(notice.details);
+    setLocation(notice.location||"");
     setStartAt(notice.startAt);
     setEndAt(notice.endAt);
     setEventTime(friendlyTimeTo24(notice.eventTime));
@@ -174,11 +180,12 @@ export default function NoticesPage({
     setError("");
 
     const doesRecur=canRecur&&recurring;
-    const payload={
+    const standardPayload={
       shul_id:shulId,
       content_type:type,
       title:headline.trim()||type,
       details:details.trim()||null,
+      location:location.trim()||null,
       display_start:startAt,
       display_end:endAt,
       event_time:needsTime&&eventTime?eventTime:null,
@@ -193,15 +200,22 @@ export default function NoticesPage({
       ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
     };
 
+    const linkedDetailsPayload={
+      details:details.trim()||null,
+      location:location.trim()||null,
+      updated_at:new Date().toISOString(),
+      ...(mode==="immediate"?{immediate_sent_at:new Date().toISOString()}:{})
+    };
+
     const result=editingNoticeId
       ? await supabase.from("notices_events")
-          .update(payload)
+          .update(isLinkedSpecialEvent?linkedDetailsPayload:standardPayload)
           .eq("id",editingNoticeId)
           .eq("shul_id",shulId)
           .select("*")
           .maybeSingle()
       : await supabase.from("notices_events")
-          .insert(payload)
+          .insert(standardPayload)
           .select("*")
           .maybeSingle();
 
@@ -317,14 +331,22 @@ export default function NoticesPage({
 
           {error&&<div className="monthlySetupError">{error}</div>}
 
+          {isLinkedSpecialEvent&&(
+            <div className="linkedSpecialEventNotice">
+              <strong>Linked to Monthly Setup</strong>
+              <span>Name, date and time come from Monthly Setup. Add the communication details here.</span>
+            </div>
+          )}
+
           <div className="formGrid">
-            <label>Type<select value={type} onChange={e=>{setType(e.target.value as NoticeType);setRecurring(false);}}>{noticeTypes.map(n=><option key={n}>{n}</option>)}</select></label>
-            {needsTime && <label>Event / schedule time<input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} /></label>}
-            <label>Display start date<input type="date" value={startAt} onChange={e=>setStartAt(e.target.value)} /></label>
-            <label>Display end date<input type="date" value={endAt} onChange={e=>setEndAt(e.target.value)} /></label>
+            <label>Type<select disabled={isLinkedSpecialEvent} value={type} onChange={e=>{setType(e.target.value as NoticeType);setRecurring(false);}}>{noticeTypes.map(n=><option key={n}>{n}</option>)}</select></label>
+            {needsTime && <label>Event / schedule time<input disabled={isLinkedSpecialEvent} type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} /></label>}
+            <label>Display start date<input disabled={isLinkedSpecialEvent} type="date" value={startAt} onChange={e=>setStartAt(e.target.value)} /></label>
+            <label>Display end date<input disabled={isLinkedSpecialEvent} type="date" value={endAt} onChange={e=>setEndAt(e.target.value)} /></label>
+            <label>Location<input value={location} onChange={e=>setLocation(e.target.value)} placeholder="Main ballroom, social hall, address…" /></label>
           </div>
 
-          <label>Headline<input value={headline} onChange={e=>setHeadline(e.target.value)} placeholder="Short headline" /></label>
+          <label>Headline<input disabled={isLinkedSpecialEvent} value={headline} onChange={e=>setHeadline(e.target.value)} placeholder="Short headline" /></label>
           <label>Details<textarea value={details} onChange={e=>setDetails(e.target.value)} placeholder="What should members see?" /></label>
 
           {canRecur && (
@@ -395,7 +417,7 @@ export default function NoticesPage({
           )}
 
           <div className="formActions">
-            {editingNoticeId&&(
+            {editingNoticeId&&!isLinkedSpecialEvent&&(
               <button className="dangerButton" disabled={saving||deleting} onClick={()=>setShowDeleteConfirm(true)}>Delete</button>
             )}
             <button className="secondary" disabled={saving||deleting} onClick={closeForm}>Cancel</button>
@@ -416,7 +438,9 @@ export default function NoticesPage({
             <div>
               <strong>{n.headline}</strong>
               {n.eventTime && <div className="noticeTime">{n.eventTime}</div>}
+              {n.location&&<div className="noticeLocation">Location: {n.location}</div>}
               <p>{n.details}</p>
+              {n.linkedSpecialEventKey&&<small className="linkedNoticeLabel">Linked to Monthly Setup</small>}
               {n.recurrence?.enabled && <small className="recurringLabel">Recurring · {n.recurrence.frequency}</small>}
             </div>
             <div className="noticeMeta">
