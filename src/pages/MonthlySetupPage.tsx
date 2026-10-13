@@ -34,7 +34,7 @@ type FocusedZmanDefaults = {
 
 type MonthlyService = "Shacharis" | "Mincha" | "Maariv";
 type MonthlyAdditionalField = {key:string;label:string;helpText?:string;allowMultiple?:boolean};
-type MonthlyCustomEvent = {id:string;label:string;time:string};
+type MonthlyCustomEvent = {id:string;label:string;time:string;location:string;details:string};
 type ChanukahDateChoice = {date:string;hebrewLabel:string;englishLabel:string};
 type MonthlyDateCard = {
   date:string;
@@ -1024,24 +1024,44 @@ export default function MonthlySetupPage({
       :monthOccurrence.end;
 
     async function loadSavedMonthlySpecialEvents(){
-      const {data,error}=await supabase
-        .from("special_schedule_entries")
-        .select("event_date,title,event_time,note,sort_order,linked_event_key")
-        .eq("shul_id",shulId)
-        .eq("active",true)
-        .gte("event_date",rangeStart)
-        .lte("event_date",rangeEnd)
-        .order("event_date")
-        .order("sort_order");
+      const [entriesRes,noticesRes]=await Promise.all([
+        supabase
+          .from("special_schedule_entries")
+          .select("event_date,title,event_time,note,sort_order,linked_event_key")
+          .eq("shul_id",shulId)
+          .eq("active",true)
+          .gte("event_date",rangeStart)
+          .lte("event_date",rangeEnd)
+          .order("event_date")
+          .order("sort_order"),
+        supabase
+          .from("notices_events")
+          .select("linked_special_event_key,location,details,display_start")
+          .eq("shul_id",shulId)
+          .is("archived_at",null)
+          .gte("display_start",rangeStart)
+          .lte("display_start",rangeEnd)
+      ]);
 
       if(cancelled)return;
+      const error=entriesRes.error||noticesRes.error;
       if(error){
         setMonthlyError(error.message);
         return;
       }
 
+      const noticeByKey=new Map<string,{location:string;details:string}>();
+      (noticesRes.data||[]).forEach((row:any)=>{
+        const key=String(row.linked_special_event_key||"");
+        if(!key)return;
+        noticeByKey.set(key,{
+          location:String(row.location||""),
+          details:String(row.details||"")
+        });
+      });
+
       const grouped:Record<string,MonthlyCustomEvent[]>={};
-      (data||[]).forEach((row:any,index:number)=>{
+      (entriesRes.data||[]).forEach((row:any,index:number)=>{
         const title=String(row.title||"").trim();
         const isSavedCustom=row.note==="monthly_custom_event"
           ||/simchas beis hashoeva/i.test(title)
@@ -1050,12 +1070,16 @@ export default function MonthlySetupPage({
         if(!isSavedCustom)return;
 
         const date=String(row.event_date);
+        const id=String(row.linked_event_key||crypto.randomUUID());
+        const notice=noticeByKey.get(id);
         grouped[date]=[
           ...(grouped[date]||[]),
           {
-            id:String(row.linked_event_key||crypto.randomUUID()),
+            id,
             label:title,
-            time:row.event_time?String(row.event_time).slice(0,5):""
+            time:row.event_time?String(row.event_time).slice(0,5):"",
+            location:notice?.location||"",
+            details:notice?.details||""
           }
         ];
       });
@@ -1189,7 +1213,9 @@ export default function MonthlySetupPage({
         {
           id:crypto.randomUUID(),
           label,
-          time:""
+          time:"",
+          location:"",
+          details:""
         }
       ]
     }));
@@ -1229,13 +1255,15 @@ export default function MonthlySetupPage({
         {
           id:crypto.randomUUID(),
           label:linked[0]?.label||"",
-          time:""
+          time:"",
+          location:"",
+          details:""
         }
       ]
     }));
   };
 
-  const updateMonthlyCustomEvent=(date:string,id:string,field:"label"|"time",value:string)=>{
+  const updateMonthlyCustomEvent=(date:string,id:string,field:"label"|"time"|"location"|"details",value:string)=>{
     setMonthlyCustomEvents(current=>({
       ...current,
       [date]:(current[date]||[]).map(item=>item.id===id?{...item,[field]:value}:item)
@@ -1480,6 +1508,8 @@ export default function MonthlySetupPage({
             event_date:item.date,
             title:item.label.trim(),
             event_time:item.time,
+            location:item.location.trim()||null,
+            details:item.details.trim()||null,
             approximate:false,
             sort_order:100+index*10
           }));
@@ -1662,6 +1692,22 @@ export default function MonthlySetupPage({
                           onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"time",e.target.value)}
                         />
                       </label>
+                      <label>
+                        <span>Location <small>(optional)</small></span>
+                        <input
+                          value={lighting.location}
+                          placeholder="Social hall, main shul, address…"
+                          onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"location",e.target.value)}
+                        />
+                      </label>
+                      <label className="monthlySpecialEventDetails">
+                        <span>Details <small>(optional)</small></span>
+                        <textarea
+                          value={lighting.details}
+                          placeholder="Refreshments, parking, sponsor, instructions…"
+                          onChange={e=>updateMonthlyCustomEvent(lighting.date,lighting.id,"details",e.target.value)}
+                        />
+                      </label>
                       <button
                         type="button"
                         className="secondary monthlyRemoveTime"
@@ -1715,6 +1761,22 @@ export default function MonthlySetupPage({
                           type="time"
                           value={party.time}
                           onChange={e=>updateMonthlyCustomEvent(party.date,party.id,"time",e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Location <small>(optional)</small></span>
+                        <input
+                          value={party.location}
+                          placeholder="Social hall, main shul, address…"
+                          onChange={e=>updateMonthlyCustomEvent(party.date,party.id,"location",e.target.value)}
+                        />
+                      </label>
+                      <label className="monthlySpecialEventDetails">
+                        <span>Details <small>(optional)</small></span>
+                        <textarea
+                          value={party.details}
+                          placeholder="Refreshments, parking, sponsor, instructions…"
+                          onChange={e=>updateMonthlyCustomEvent(party.date,party.id,"details",e.target.value)}
                         />
                       </label>
                       <button
@@ -1942,6 +2004,22 @@ export default function MonthlySetupPage({
                                   type="time"
                                   value={event.time}
                                   onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"time",e.target.value)}
+                                />
+                              </label>
+                              <label>
+                                <span>Location <small>(optional)</small></span>
+                                <input
+                                  value={event.location}
+                                  placeholder="Social hall, main shul, address…"
+                                  onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"location",e.target.value)}
+                                />
+                              </label>
+                              <label className="monthlySpecialEventDetails">
+                                <span>Details <small>(optional)</small></span>
+                                <textarea
+                                  value={event.details}
+                                  placeholder="Refreshments, parking, sponsor, instructions…"
+                                  onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"details",e.target.value)}
                                 />
                               </label>
                               <button
