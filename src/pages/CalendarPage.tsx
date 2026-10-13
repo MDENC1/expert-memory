@@ -1210,7 +1210,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           {multiMode ? "Multi-Day Edit On" : "Multi-Day Edit"}
         </button>
         <span>{loading ? "Loading calendar..." : (selected.length ? `${selected.length} day${selected.length===1?"":"s"} selected${multiMode?" — selections stay active when you change months":""}` : "Select a day to edit its schedule and preview the magnet.")}</span>
-        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>
+        {!loading && <small>{zmanimError ? "Zmanim unavailable" : (zmanimSource ? `Times from ${zmanimSource}` : "Times loading")}</small>}
         {selected.length>0 && <button className="secondary" onClick={()=>{setSelected([]);setShowAdd(false)}}>Clear Selection</button>}
         {selected.length>0 && <button className="primary" onClick={()=>setShowAdd(true)}>+ Add Event / Notice</button>}
       </div>
