@@ -33,6 +33,7 @@ export type CalendarDay = {
   specialTimes?: SpecialTime[];
   zmanimRows?: Array<{label:string;time:string}>;
   hebrewFullDate?: string;
+  dafYomi?: string;
   shulScheduleRows?: Array<{label:string;time?:string;note?:string}>;
 };
 
