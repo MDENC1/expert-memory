@@ -1850,3 +1850,147 @@ body{color:#172b26}
   .monthlyMonthPicker{display:grid}
   .monthlyMonthSelect{width:100%;min-width:0}
 }
+
+
+/* Monthly Setup chronological date cards */
+.monthlyMonthCurrent small{
+  margin-left:auto;
+  color:#5f716c;
+  font-size:11px;
+}
+.monthlyDateList{display:grid;gap:14px}
+.monthlyDateCard{
+  border:1px solid #dce7e3;
+  border-radius:14px;
+  background:#fff;
+  overflow:hidden;
+}
+.monthlyDateHead{
+  display:grid;
+  grid-template-columns:76px 1fr;
+  gap:14px;
+  align-items:center;
+  padding:16px;
+  border-bottom:1px solid #e6eeeb;
+}
+.monthlyDateHead h3{
+  margin:3px 0 2px;
+  font-size:18px;
+  color:#20312d;
+}
+.monthlyHebrewDate{
+  min-height:68px;
+  border-radius:12px;
+  background:#eef7f3;
+  display:grid;
+  place-content:center;
+  text-align:center;
+  color:#315e52;
+}
+.monthlyHebrewDate strong{font-size:24px;line-height:1}
+.monthlyHebrewDate span{font-size:11px;font-weight:850;margin-top:4px}
+.monthlyServiceGrid{padding:0 16px 16px}
+.monthlyServiceGridHead,
+.monthlyServiceRow{
+  display:grid;
+  grid-template-columns:minmax(110px,.7fr) minmax(170px,1.2fr) minmax(190px,1fr);
+  gap:14px;
+  align-items:center;
+}
+.monthlyServiceGridHead{
+  padding:11px 12px;
+  color:#667772;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.monthlyServiceRow{
+  min-height:74px;
+  padding:11px 12px;
+  border-top:1px solid #edf2f0;
+}
+.monthlyServiceRow>strong{font-size:14px;color:#20312d}
+.monthlyServiceRow label{display:grid;gap:4px}
+.monthlyServiceRow input[type="time"],
+.monthlyAdditionalField input[type="time"]{
+  width:100%;
+  min-height:40px;
+}
+.monthlyServiceRow small,
+.monthlyRegularValue small,
+.monthlyAdditionalField small{
+  color:#778681;
+  font-size:10px;
+}
+.monthlyRegularValue{display:grid;gap:3px}
+.monthlyRegularValue strong{font-size:14px;color:#315e52}
+.monthlyAdditionalBlock{
+  margin:0 16px 16px;
+  padding:14px;
+  border-radius:12px;
+  background:#f7faf9;
+  border:1px solid #e1ebe7;
+  display:grid;
+  gap:12px;
+}
+.monthlyFastBlock{background:#fbfaf5}
+.monthlyAdditionalHead{display:grid;gap:2px}
+.monthlyAdditionalHead strong{font-size:13px;color:#20312d}
+.monthlyAdditionalHead span{font-size:11px;color:#6d7b77}
+.monthlyAdditionalGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.monthlyAdditionalField{display:grid;gap:5px}
+.monthlyAdditionalField>span{font-size:11px;font-weight:850;color:#334742}
+.monthlyGeneratedValue{
+  min-height:48px;
+  border:1px solid #dce6e2;
+  border-radius:9px;
+  background:#fff;
+  padding:8px 10px;
+  display:grid;
+  gap:2px;
+}
+.monthlyGeneratedValue strong{font-size:14px}
+.monthlyGeneratedValue small{font-size:10px;color:#71817c}
+.monthlyUseAutomatic{justify-self:start}
+.monthlySetupError{
+  padding:12px 14px;
+  border:1px solid #d8a0a0;
+  border-radius:10px;
+  background:#fff7f7;
+  color:#7a2f2f;
+}
+.monthlySetupLoading{
+  display:grid;
+  gap:4px;
+  padding:16px;
+  border:1px dashed #cbdcd6;
+  border-radius:12px;
+  color:#435a54;
+}
+.monthlySetupLoading span{font-size:11px;color:#71817c}
+.monthlySetupSaveBar{
+  position:sticky;
+  bottom:10px;
+  z-index:2;
+  border:1px solid #d7e5e0;
+  border-radius:12px;
+  background:rgba(255,255,255,.96);
+  padding:12px;
+  box-shadow:0 8px 24px rgba(32,49,45,.08);
+}
+@media(max-width:760px){
+  .monthlyMonthCurrent{align-items:flex-start;flex-wrap:wrap}
+  .monthlyMonthCurrent small{width:100%;margin-left:0}
+  .monthlyDateHead{grid-template-columns:60px 1fr}
+  .monthlyServiceGridHead{display:none}
+  .monthlyServiceRow{
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+  .monthlyServiceRow>strong{font-size:15px}
+}
