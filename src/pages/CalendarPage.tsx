@@ -846,8 +846,14 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
     const special=dayMap.get(date);
     const rows=entriesMap.get(date)||[];
-    if(special?.replace_normal_schedule&&special.confirmed_at&&rows.length){
-      return rows.map(r=>({label:r.title,time:specialResolvedTime(date,special,r),note:r.note||""}));
+    if(special?.confirmed_at&&rows.length){
+      const specialRows=rows.map(r=>({
+        label:r.title,
+        time:specialResolvedTime(date,special,r),
+        note:r.note||""
+      }));
+      if(special.replace_normal_schedule)return specialRows;
+      return [...regularRowsForDate(date),...specialRows];
     }
 
     // Hebcal owns the Jewish calendar/date classification. If this date
