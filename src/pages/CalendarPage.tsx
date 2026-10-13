@@ -236,6 +236,7 @@ function defaultRecurrenceEnd(date:string){
 
 function noticeMatchesDate(notice:Notice,date:string) {
   if(date<notice.startAt||date>notice.endAt)return false;
+  if(notice.recurrence?.excludedDates?.includes(date))return false;
   if(!notice.recurrence?.enabled)return true;
 
   const d=new Date(`${date}T12:00:00`);
@@ -271,6 +272,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [newMonthDays,setNewMonthDays] = useState<number[]>([]);
   const [savingContent,setSavingContent] = useState(false);
   const [editingNoticeId,setEditingNoticeId] = useState<string|null>(null);
+  const [showDeleteConfirm,setShowDeleteConfirm] = useState(false);
+  const [deletingContent,setDeletingContent] = useState(false);
   const [specialDays,setSpecialDays] = useState<SpecialDay[]>([]);
   const [specialEntries,setSpecialEntries] = useState<SpecialEntry[]>([]);
   const [loading,setLoading] = useState(false);
@@ -1245,6 +1248,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     if(!selected.length)return;
     const sorted=[...selected].sort();
     setEditingNoticeId(null);
+    setShowDeleteConfirm(false);
     setNewType("General Notice");
     setNewLinkedSpecialEventKey("");
     setNewHeadline("");
@@ -1261,6 +1265,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const openEditModal=(notice:Notice)=>{
     setEditingNoticeId(notice.id);
+    setShowDeleteConfirm(false);
     setNewLinkedSpecialEventKey("");
     setNewType(notice.type);
     setNewHeadline(notice.headline);
@@ -1321,6 +1326,74 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     setNewRecurring(false);
   };
 
+  const editingNotice=editingNoticeId
+    ? notices.find(notice=>notice.id===editingNoticeId)
+    : undefined;
+
+  const deleteEditedNotice=async(scope:"occurrence"|"series")=>{
+    if(!editingNoticeId||!editingNotice)return;
+    setDeletingContent(true);
+    setError("");
+
+    if(scope==="occurrence"&&editingNotice.recurrence?.enabled&&selectedDay){
+      const excludedDates=[...new Set([
+        ...(editingNotice.recurrence.excludedDates||[]),
+        selectedDay
+      ])].sort();
+
+      const {error}=await supabase
+        .from("notices_events")
+        .update({
+          recurrence_excluded_dates:excludedDates,
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",editingNoticeId)
+        .eq("shul_id",shulId);
+
+      if(error){
+        setError(error.message);
+        setDeletingContent(false);
+        return;
+      }
+
+      setNotices(notices.map(notice=>
+        notice.id===editingNoticeId
+          ? {
+              ...notice,
+              recurrence:{
+                ...(notice.recurrence||{enabled:true}),
+                enabled:true,
+                excludedDates
+              }
+            }
+          :notice
+      ));
+    }else{
+      const {error}=await supabase
+        .from("notices_events")
+        .update({
+          archived_at:new Date().toISOString(),
+          active:false,
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",editingNoticeId)
+        .eq("shul_id",shulId);
+
+      if(error){
+        setError(error.message);
+        setDeletingContent(false);
+        return;
+      }
+
+      setNotices(notices.filter(notice=>notice.id!==editingNoticeId));
+    }
+
+    setDeletingContent(false);
+    setShowDeleteConfirm(false);
+    setEditingNoticeId(null);
+    setShowAdd(false);
+  };
+
   const addToSelectedDates=async(mode:"scheduled"|"immediate")=>{
     if(!selected.length||!newHeadline.trim())return;
     if(mode==="immediate"&&remainingPushes<=0)return;
@@ -1374,7 +1447,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           enabled:Boolean(data.recurring),
           frequency:data.recurrence_type||undefined,
           weekdays:data.recurrence_weekdays||[],
-          monthDays:data.recurrence_month_days||[]
+          monthDays:data.recurrence_month_days||[],
+          excludedDates:(data.recurrence_excluded_dates||[]).map((value:string)=>String(value))
         },
         priority:existing?.priority||"normal",
         publishMode:mode==="immediate"?"immediate":(existing?.publishMode||"scheduled"),
@@ -1437,7 +1511,8 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           enabled:Boolean(row.recurring),
           frequency:row.recurrence_type||undefined,
           weekdays:row.recurrence_weekdays||[],
-          monthDays:row.recurrence_month_days||[]
+          monthDays:row.recurrence_month_days||[],
+          excludedDates:(row.recurrence_excluded_dates||[]).map((value:string)=>String(value))
         },
         priority:"normal",
         publishMode:mode,
@@ -1937,12 +2012,74 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               </div>
             )}
 
+            {editingNoticeId&&showDeleteConfirm&&editingNotice&&(
+              <div className="deleteConfirmBox">
+                <div>
+                  <strong>Are you sure you want to delete this?</strong>
+                  <span>
+                    {editingNotice.recurrence?.enabled
+                      ?"This is part of a recurring series."
+                      :"This notice or event will be removed."}
+                  </span>
+                </div>
+                <div className="deleteConfirmActions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={deletingContent}
+                    onClick={()=>setShowDeleteConfirm(false)}
+                  >
+                    Keep it
+                  </button>
+                  {editingNotice.recurrence?.enabled&&selectedDay ? (
+                    <>
+                      <button
+                        type="button"
+                        className="dangerButton"
+                        disabled={deletingContent}
+                        onClick={()=>void deleteEditedNotice("occurrence")}
+                      >
+                        {deletingContent?"Deleting…":"Delete Only This Date"}
+                      </button>
+                      <button
+                        type="button"
+                        className="dangerButton"
+                        disabled={deletingContent}
+                        onClick={()=>void deleteEditedNotice("series")}
+                      >
+                        {deletingContent?"Deleting…":"Delete Entire Series"}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="dangerButton"
+                      disabled={deletingContent}
+                      onClick={()=>void deleteEditedNotice("series")}
+                    >
+                      {deletingContent?"Deleting…":"Yes, Delete"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="formActions calendarModalActions">
-              <button className="secondary" disabled={savingContent} onClick={()=>{setShowAdd(false);setEditingNoticeId(null)}}>Cancel</button>
-              <button className="secondary" disabled={savingContent||!newHeadline.trim()} onClick={()=>addToSelectedDates("scheduled")}>
+              {editingNoticeId&&(
+                <button
+                  type="button"
+                  className="dangerButton"
+                  disabled={savingContent||deletingContent}
+                  onClick={()=>setShowDeleteConfirm(true)}
+                >
+                  Delete
+                </button>
+              )}
+              <button className="secondary" disabled={savingContent||deletingContent} onClick={()=>{setShowAdd(false);setEditingNoticeId(null);setShowDeleteConfirm(false)}}>Cancel</button>
+              <button className="secondary" disabled={savingContent||deletingContent||!newHeadline.trim()} onClick={()=>addToSelectedDates("scheduled")}>
                 {savingContent?"Saving…":editingNoticeId?"Save changes":"Save for regular update"}
               </button>
-              <button className="primary" disabled={savingContent||!newHeadline.trim()||remainingPushes<=0} onClick={()=>addToSelectedDates("immediate")}>
+              <button className="primary" disabled={savingContent||deletingContent||!newHeadline.trim()||remainingPushes<=0} onClick={()=>addToSelectedDates("immediate")}>
                 {editingNoticeId?"Save & Send Now":"Send to Magnets Now"} ({remainingPushes} left)
               </button>
             </div>
