@@ -75,6 +75,8 @@ export type Notice = {
   type: NoticeType;
   headline: string;
   details: string;
+  location?: string;
+  linkedSpecialEventKey?: string;
   startAt: string;
   endAt: string;
   eventTime?: string;
