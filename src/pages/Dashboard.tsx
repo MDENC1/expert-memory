@@ -38,7 +38,6 @@ export default function Dashboard({
   const [publishing,setPublishing]=useState(false);
   const [publishStatus,setPublishStatus]=useState("");
   const liveNotices=notices.filter(n=>n.status==="live");
-  const liveNotice=liveNotices[0];
 
   async function publishToBadger(){
     if(!shulId||publishing)return;
