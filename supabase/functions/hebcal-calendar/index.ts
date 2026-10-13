@@ -145,6 +145,7 @@ Deno.serve(async (req)=>{
       maj:"on",
       min:"on",
       mf:"on",
+      F:"on",
       start,
       end,
       i:countryCode==="IL"?"on":"off",
@@ -162,6 +163,13 @@ Deno.serve(async (req)=>{
     if(!response.ok)throw new Error(`Hebcal HTTP ${response.status}`);
     const payload=await response.json();
     const items:Array<CalendarItem>=Array.isArray(payload?.items)?payload.items:[];
+
+    const dafYomi:Record<string,string>={};
+    for(const item of items){
+      if(item.category==="dafyomi"&&item.date&&item.title){
+        dafYomi[String(item.date).slice(0,10)]=String(item.title);
+      }
+    }
 
     const events:SpecialEvent[]=items.flatMap(item=>{
       if(item.category!=="holiday"||!item.date||!item.title)return [];
@@ -183,7 +191,8 @@ Deno.serve(async (req)=>{
       success:true,
       source:"Hebcal",
       israel:countryCode==="IL",
-      events
+      events,
+      daf_yomi:dafYomi
     }),{
       status:200,
       headers:{
