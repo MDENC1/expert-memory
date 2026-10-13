@@ -313,7 +313,12 @@ function hebrewFullDate(date:Date){
 }
 
 function isGenericSpecialTitle(title:string|null|undefined){
-  return !title || /^tishrei schedule$/i.test(title.trim());
+  return !title || /^(tishrei schedule|monthly special event)$/i.test(title.trim());
+}
+
+function visibleSpecialNote(note:string|null|undefined){
+  const value=(note||"").trim();
+  return value==="monthly_custom_event" ? undefined : (value||undefined);
 }
 
 function noticeRowMatchesDate(row:any,date:string){
@@ -412,7 +417,7 @@ function buildLiveDay(
     const rows=specialEntries.map(e=>({
       label:e.title,
       time:e.event_time ? prettyTime(e.event_time) : undefined,
-      note:e.note || undefined
+      note:visibleSpecialNote(e.note)
     }));
     const exact=(needle:string)=>specialEntries
       .filter(e=>e.title.trim().toLowerCase()===needle)
@@ -469,7 +474,7 @@ function buildLiveDay(
   ) ? specialEntries.map(entry=>({
     label:entry.title,
     time:entry.event_time?prettyTime(entry.event_time):undefined,
-    note:entry.note||undefined
+    note:visibleSpecialNote(entry.note)
   })) : [];
 
   return {
