@@ -1026,7 +1026,7 @@ export default function MonthlySetupPage({
     async function loadSavedMonthlySpecialEvents(){
       const {data,error}=await supabase
         .from("special_schedule_entries")
-        .select("event_date,title,event_time,note,sort_order")
+        .select("event_date,title,event_time,note,sort_order,linked_event_key")
         .eq("shul_id",shulId)
         .eq("active",true)
         .gte("event_date",rangeStart)
@@ -1045,14 +1045,15 @@ export default function MonthlySetupPage({
         const title=String(row.title||"").trim();
         const isSavedCustom=row.note==="monthly_custom_event"
           ||/simchas beis hashoeva/i.test(title)
-          ||/menorah lighting/i.test(title);
+          ||/menorah lighting/i.test(title)
+          ||/chanukah party/i.test(title);
         if(!isSavedCustom)return;
 
         const date=String(row.event_date);
         grouped[date]=[
           ...(grouped[date]||[]),
           {
-            id:`saved-${date}-${row.sort_order||index}-${index}`,
+            id:String(row.linked_event_key||crypto.randomUUID()),
             label:title,
             time:row.event_time?String(row.event_time).slice(0,5):""
           }
@@ -1186,7 +1187,7 @@ export default function MonthlySetupPage({
       [date]:[
         ...(current[date]||[]),
         {
-          id:`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          id:crypto.randomUUID(),
           label,
           time:""
         }
@@ -1226,7 +1227,7 @@ export default function MonthlySetupPage({
       [date]:[
         ...(current[date]||[]),
         {
-          id:`${date}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          id:crypto.randomUUID(),
           label:linked[0]?.label||"",
           time:""
         }
@@ -1433,19 +1434,6 @@ export default function MonthlySetupPage({
           }
         });
 
-        for(const customEvent of customEventsForDate(card.date)){
-          const label=customEvent.label.trim();
-          if(!label||!customEvent.time)continue;
-          rows.push({
-            title:label,
-            event_time:customEvent.time,
-            approximate:false,
-            note:"monthly_custom_event",
-            sort_order:additionalSort
-          });
-          additionalSort+=10;
-        }
-
         return {
           event_date:card.date,
           title:card.title,
@@ -1471,27 +1459,38 @@ export default function MonthlySetupPage({
         if(error)throw error;
       }
 
-      if(month==="Kislev"&&chanukahDates.length===8){
-        const chanukahEventRows=[
-          ...chanukahLightings.map(item=>({...item,title:"Menorah Lighting"})),
-          ...chanukahParties.map(item=>({...item,title:"Chanukah Party"}))
-        ]
-          .filter(item=>item.time)
+      if(monthOccurrence){
+        const customRangeStart=monthOccurrence.start;
+        const customRangeEnd=month==="Kislev"&&chanukahDates.length
+          ?chanukahDates[chanukahDates.length-1].date
+          :monthOccurrence.end;
+
+        const customEventRows=Object.entries(monthlyCustomEvents)
+          .flatMap(([date,events])=>
+            events.map(event=>({date,...event}))
+          )
+          .filter(item=>
+            item.date>=customRangeStart&&
+            item.date<=customRangeEnd&&
+            item.label.trim()&&
+            item.time
+          )
           .map((item,index)=>({
+            event_key:item.id,
             event_date:item.date,
-            title:item.title,
+            title:item.label.trim(),
             event_time:item.time,
             approximate:false,
             sort_order:100+index*10
           }));
 
-        const {error:chanukahEventsSaveError}=await supabase.rpc("save_monthly_custom_events",{
+        const {error:customEventsSaveError}=await supabase.rpc("save_monthly_custom_events",{
           p_shul_id:shulId,
-          p_start_date:chanukahDates[0].date,
-          p_end_date:chanukahDates[chanukahDates.length-1].date,
-          p_rows:chanukahEventRows
+          p_start_date:customRangeStart,
+          p_end_date:customRangeEnd,
+          p_rows:customEventRows
         });
-        if(chanukahEventsSaveError)throw chanukahEventsSaveError;
+        if(customEventsSaveError)throw customEventsSaveError;
       }
 
       setStatus(`${month} saved. Special schedules were applied to the correct Hebrew dates.`);
