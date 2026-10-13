@@ -1590,7 +1590,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               const matching=notices.filter(n=>noticeMatchesDate(n,cell.date));
               const isToday=cell.date===isoDate(new Date());
               const hasManualOverride=(overrideMap.get(cell.date)||[]).length>0;
-              const hasConfirmedSpecial=Boolean(special?.confirmed_at);
+              const hasConfirmedSpecial=Boolean(special?.confirmed_at)&&!isInternalSpecialDayTitle(special?.title);
               const hebcalEvent=primaryHebcalEvent(cell.date);
               const missingSpecial=Boolean(blockingHebcalEvent(cell.date))&&!dateHasConfiguredSpecialSchedule(cell.date);
               const holiday=special?.title && !isInternalSpecialDayTitle(special.title)
