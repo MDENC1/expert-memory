@@ -819,14 +819,155 @@ export default function MonthlySetupPage({
   };
 
 
-  const template = useMemo(
-    () => jewishMonthTemplates.find(item => item.month === month) ?? jewishMonthTemplates[0],
-    [month]
-  );
-  const monthFastDays=useMemo(
-    ()=>fastDays.filter(fast=>fast.month===month),
-    [month]
-  );
+  const monthOccurrence=useMemo(()=>findHebrewMonthOccurrence(month),[month]);
+
+  useEffect(()=>{
+    if(focusGroup||!monthOccurrence){
+      setMonthHebcalEvents([]);
+      setMonthlyZmanim({});
+      setMonthlyError("");
+      return;
+    }
+
+    let cancelled=false;
+
+    async function loadMonthlyContext(){
+      setMonthlyLoading(true);
+      setMonthlyError("");
+
+      try{
+        const first=new Date(`${monthOccurrence.start}T12:00:00`);
+        const last=new Date(`${monthOccurrence.end}T12:00:00`);
+        const rangeStart=focusedIsoDate(new Date(first.getFullYear(),first.getMonth(),1,12));
+        const rangeEnd=focusedIsoDate(new Date(last.getFullYear(),last.getMonth()+1,0,12));
+
+        const hebcalPromise=supabase.functions.invoke("hebcal-calendar",{
+          body:{
+            start_date:monthOccurrence.start,
+            end_date:monthOccurrence.end,
+            country_code:countryCode
+          }
+        });
+
+        const merged:FocusedZmanimBatch={sunset:{},candleLighting:{},plagHaMincha:{},sources:{}};
+
+        if(postalCode){
+          let chunkStart=rangeStart;
+          while(chunkStart<=rangeEnd){
+            const candidateEnd=focusedShiftDate(chunkStart,39);
+            const chunkEnd=candidateEnd<rangeEnd?candidateEnd:rangeEnd;
+            const {data,error}=await supabase.functions.invoke("myzmanim",{
+              body:{
+                postal_code:postalCode,
+                country_code:countryCode,
+                location_id:locationId||undefined,
+                start_date:chunkStart,
+                end_date:chunkEnd
+              }
+            });
+            if(error||!data?.success){
+              throw new Error(data?.error||error?.message||"Could not load regular MyZmanim times.");
+            }
+            const times=(data.times||{}) as FocusedZmanimBatch;
+            merged.sunset={...(merged.sunset||{}),...(times.sunset||{})};
+            merged.candleLighting={...(merged.candleLighting||{}),...(times.candleLighting||{})};
+            merged.plagHaMincha={...(merged.plagHaMincha||{}),...(times.plagHaMincha||{})};
+            for(const [source,map] of Object.entries(times.sources||{})){
+              merged.sources={
+                ...(merged.sources||{}),
+                [source]:{
+                  ...(merged.sources?.[source]||{}),
+                  ...(map||{})
+                }
+              };
+            }
+            chunkStart=focusedShiftDate(chunkEnd,1);
+          }
+        }
+
+        const {data:hebcalData,error:hebcalError}=await hebcalPromise;
+        if(hebcalError||!hebcalData?.success){
+          throw new Error(hebcalData?.error||hebcalError?.message||"Could not load Jewish calendar dates.");
+        }
+
+        if(cancelled)return;
+        setMonthlyZmanim(merged);
+        setMonthHebcalEvents((hebcalData.events||[]) as HebcalSpecialEvent[]);
+      }catch(error){
+        if(cancelled)return;
+        setMonthlyError(error instanceof Error?error.message:"Could not load monthly setup.");
+        setMonthlyZmanim({});
+        setMonthHebcalEvents([]);
+      }finally{
+        if(!cancelled)setMonthlyLoading(false);
+      }
+    }
+
+    void loadMonthlyContext();
+    return()=>{cancelled=true;};
+  },[
+    focusGroup,
+    monthOccurrence?.start,
+    monthOccurrence?.end,
+    postalCode,
+    countryCode,
+    locationId
+  ]);
+
+  const monthlyCards=useMemo(()=>{
+    if(!monthOccurrence)return [] as MonthlyDateCard[];
+
+    const byDate=new Map<string,MonthlyDateCard>();
+
+    for(const event of monthHebcalEvents){
+      const title=event.title||"Special Date";
+      const lower=title.toLowerCase();
+      const include=event.requires_confirmation||lower.includes("erev pesach")||lower.includes("selich");
+      if(!include)continue;
+
+      const parts=hebrewPartsForDate(new Date(`${event.date}T12:00:00`));
+      if(normalizeHebrewMonthName(parts.month)!==month)continue;
+
+      const existing=byDate.get(event.date);
+      const additions=monthlyAdditionalFields(title);
+      if(existing){
+        const seen=new Set(existing.additional.map(item=>item.key));
+        existing.additional.push(...additions.filter(item=>!seen.has(item.key)));
+        if(event.blocks_regular_schedule)existing.replaceSchedule=true;
+        if(event.blocks_regular_schedule)existing.title=title;
+      }else{
+        byDate.set(event.date,{
+          date:event.date,
+          hebrewDay:parts.day,
+          title,
+          replaceSchedule:!lower.includes("selich"),
+          additional:additions
+        });
+      }
+    }
+
+    for(const item of STATIC_MONTHLY_DATES[month]||[]){
+      const date=monthOccurrence.datesByDay[item.day];
+      if(!date)continue;
+      const existing=byDate.get(date);
+      if(existing){
+        const seen=new Set(existing.additional.map(field=>field.key));
+        existing.additional.push(...item.additional.filter(field=>!seen.has(field.key)));
+      }else{
+        byDate.set(date,{
+          date,
+          hebrewDay:item.day,
+          title:item.title,
+          replaceSchedule:false,
+          additional:item.additional
+        });
+      }
+    }
+
+    return [...byDate.values()].sort((a,b)=>
+      a.hebrewDay-b.hebrewDay||a.date.localeCompare(b.date)
+    );
+  },[month,monthOccurrence,monthHebcalEvents]);
 
   const displayTime = (value:string) => {
     const [h,m] = value.split(":").map(Number);
@@ -834,25 +975,175 @@ export default function MonthlySetupPage({
     return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
   };
 
-  const saveMonth = () => {
-    setDays(days.map(day => {
-      const generatedKeys = new Set(["hoshana_rabbah","shemini_yizkor","hakafos_day"]);
-      const specialTimes = (day.specialTimes ?? []).filter(item => !generatedKeys.has(item.key));
+  const additionalValue=(date:string,key:string)=>values[`${date}|${key}`]||"";
+  const setAdditionalValue=(date:string,key:string,value:string)=>{
+    setValues(current=>({...current,[`${date}|${key}`]:value}));
+  };
 
-      if (month === "Tishrei") {
-        if (day.holiday === "Hoshana Rabbah" && values.hoshana_rabbah) {
-          specialTimes.push({key:"hoshana_rabbah",label:"Hoshana Rabbah Shacharis",time:displayTime(values.hoshana_rabbah),importance:"prominent"});
-        }
-        if (day.holiday === "Shemini Atzeres" && values.shemini_yizkor) {
-          specialTimes.push({key:"shemini_yizkor",label:"Yizkor",time:displayTime(values.shemini_yizkor),importance:"prominent"});
-        }
-        if (day.holiday === "Simchas Torah" && values.hakafos_day) {
-          specialTimes.push({key:"hakafos_day",label:"Hakafos",time:displayTime(values.hakafos_day),importance:"prominent"});
-        }
+  const setMonthlyScheduleOverride=(date:string,service:MonthlyService,value:string)=>{
+    setMonthlyScheduleOverrides(current=>({
+      ...current,
+      [date]:{
+        ...(current[date]||{}),
+        [service]:value
       }
-      return {...day,specialTimes};
     }));
-    setStatus(`${month} special times saved and applied to the correct Jewish dates.`);
+  };
+
+  const regularServiceDisplay=(date:string,service:MonthlyService)=>{
+    const rows=monthlyRegularServiceRows(
+      date,
+      service,
+      scheduleEntries,
+      monthlyZmanim,
+      zmanDefaults,
+      shabbosEndMinutes
+    );
+    if(!rows.length)return "No regular time";
+    return rows.map(row=>row.time).join(" · ");
+  };
+
+  const saveMonth=async()=>{
+    if(!shulId){
+      setMonthlyError("No shul is selected.");
+      return;
+    }
+    if(monthlyLoading){
+      setMonthlyError("Monthly times are still loading.");
+      return;
+    }
+    if(!monthlyCards.length){
+      setStatus(`No special schedule items need setup for ${month}.`);
+      return;
+    }
+
+    setMonthlySaving(true);
+    setMonthlyError("");
+    setStatus("");
+
+    try{
+      const payload=monthlyCards.map(card=>{
+        const rows:Array<{
+          title:string;
+          event_time:string|null;
+          approximate:boolean;
+          note:string|null;
+          sort_order:number;
+        }>=[];
+
+        if(card.replaceSchedule){
+          const dow=new Date(`${card.date}T12:00:00`).getDay();
+          const dayRules=scheduleEntries.filter(rule=>rule.day_of_week===dow);
+          const followsMaariv=dayRules.some(rule=>
+            rule.service_type.toLowerCase()==="maariv"&&rule.timing_source==="follows"
+          );
+          let sortOrder=10;
+
+          for(const service of MONTHLY_SERVICES){
+            const override=monthlyScheduleOverrides[card.date]?.[service]||"";
+            if(override){
+              rows.push({
+                title:service,
+                event_time:override,
+                approximate:false,
+                note:null,
+                sort_order:sortOrder
+              });
+              sortOrder+=10;
+              continue;
+            }
+
+            if(service==="Maariv"&&followsMaariv)continue;
+
+            const serviceRules=dayRules.filter(rule=>
+              rule.service_type.toLowerCase()===service.toLowerCase()
+            );
+
+            for(const rule of serviceRules){
+              if(rule.timing_source==="none"||rule.timing_source==="follows")continue;
+              const raw=focusedResolveRuleTime(
+                card.date,
+                rule,
+                scheduleEntries,
+                monthlyZmanim,
+                zmanDefaults,
+                shabbosEndMinutes
+              );
+              if(!raw)continue;
+              let label=rule.display_name||service;
+              if(service==="Mincha"&&followsMaariv){
+                label=label.replace(/\s*\/\s*Maariv$/i,"")+" / Maariv";
+              }
+              rows.push({
+                title:label,
+                event_time:raw,
+                approximate:false,
+                note:null,
+                sort_order:sortOrder
+              });
+              sortOrder+=10;
+            }
+          }
+        }
+
+        if(monthlyIsFast(card.title)){
+          const automatic=monthlyFastAutomaticTimes(
+            card.date,
+            card.title,
+            monthlyZmanim,
+            zmanDefaults,
+            shabbosEndMinutes
+          );
+          const override=fastOverrides[card.date]||{};
+          const begin=override.start||automatic.beginRaw;
+          const end=override.end||automatic.endRaw;
+          if(begin)rows.push({title:"Fast Begins",event_time:begin,approximate:false,note:null,sort_order:80});
+          if(end)rows.push({title:"Fast Ends",event_time:end,approximate:false,note:null,sort_order:90});
+        }
+
+        card.additional.forEach((field,index)=>{
+          const value=additionalValue(card.date,field.key);
+          if(value){
+            rows.push({
+              title:field.label,
+              event_time:value,
+              approximate:false,
+              note:null,
+              sort_order:100+(index*10)
+            });
+          }
+        });
+
+        return {
+          event_date:card.date,
+          title:card.title,
+          replace_normal_schedule:card.replaceSchedule,
+          rows
+        };
+      });
+
+      const missingReplacement=payload.find(item=>
+        item.replace_normal_schedule&&!item.rows.some(row=>
+          !["Fast Begins","Fast Ends"].includes(row.title)
+        )
+      );
+      if(missingReplacement){
+        throw new Error(`Regular schedule times are not available yet for ${monthlyEnglishDate(missingReplacement.event_date)}. Please wait for the automatic times to finish loading.`);
+      }
+
+      const {error}=await supabase.rpc("confirm_special_schedule_group",{
+        p_shul_id:shulId,
+        p_dates:payload
+      });
+      if(error)throw error;
+
+      setStatus(`${month} saved. Special schedules were applied to the correct Hebrew dates.`);
+      onSpecialSchedulesChanged?.();
+    }catch(error){
+      setMonthlyError(error instanceof Error?error.message:"Could not save monthly setup.");
+    }finally{
+      setMonthlySaving(false);
+    }
   };
 
   const setFastOverride=(key:string,field:"start"|"end",value:string)=>{
