@@ -66,6 +66,7 @@ export type RecurrenceRule = {
   frequency?: RecurrenceFrequency;
   weekdays?: number[];
   monthDays?: number[];
+  excludedDates?: string[];
   interval?: number;
 };
 
