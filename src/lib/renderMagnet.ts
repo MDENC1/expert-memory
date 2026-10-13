@@ -200,9 +200,11 @@ function drawCanonicalScreen(ctx: CanvasRenderingContext2D, day: CalendarDay, no
 
   ctx.fillRect(18, footerTop, 612, 2);
   ctx.font = "700 12px Arial, sans-serif";
-  ctx.fillText(day.isRoshChodesh ? "Rosh Chodesh" : "Supabase schedule", 18, footerTop + 9);
+  ctx.fillText(day.isRoshChodesh ? "Rosh Chodesh" : "Schedule", 18, footerTop + 9);
   ctx.textAlign = "right";
-  ctx.fillText("Daf Yomi", 630, footerTop + 9);
+  if(day.dafYomi){
+    ctx.fillText(`Daf Yomi: ${day.dafYomi}`, 630, footerTop + 9);
+  }
   ctx.textAlign = "left";
 }
 
