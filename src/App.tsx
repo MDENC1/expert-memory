@@ -397,7 +397,9 @@ function buildLiveDay(
     holiday:isGenericSpecialTitle(specialDay?.title)
       ? (specialRequirement?.title || undefined)
       : (specialDay?.title || specialRequirement?.title || undefined),
-    template:specialDay?.title || specialRequirement?.group_label || (dow===6 ? "Shabbos" : "Regular")
+    template:(!isGenericSpecialTitle(specialDay?.title) ? specialDay?.title : undefined)
+      || specialRequirement?.group_label
+      || (dow===6 ? "Shabbos" : "Regular")
   };
 
   if(manualOverrides.length){
@@ -480,7 +482,9 @@ function buildLiveDay(
   return {
     ...base,
     shulScheduleRows:[...rows,...additiveRows],
-    event:additiveRows.length&&specialDay?.title ? specialDay.title : undefined
+    event:additiveRows.length&&!isGenericSpecialTitle(specialDay?.title)
+      ? specialDay?.title||undefined
+      : undefined
   };
 }
 
