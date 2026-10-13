@@ -316,9 +316,34 @@ function isGenericSpecialTitle(title:string|null|undefined){
   return !title || /^tishrei schedule$/i.test(title.trim());
 }
 
+function noticeRowMatchesDate(row:any,date:string){
+  if(date<row.display_start||date>row.display_end)return false;
+  const excluded=(row.recurrence_excluded_dates||[]).map((value:string)=>String(value));
+  if(excluded.includes(date))return false;
+  if(!row.recurring)return true;
+
+  const d=new Date(`${date}T12:00:00`);
+  if(row.recurrence_type==="daily")return true;
+  if(row.recurrence_type==="weekly"){
+    return (row.recurrence_weekdays||[]).map(Number).includes(d.getDay());
+  }
+  if(row.recurrence_type==="monthly"){
+    return (row.recurrence_month_days||[]).map(Number).includes(d.getDate());
+  }
+  if(row.recurrence_type==="yearly_hebrew")return date===row.display_start;
+  return false;
+}
+
 function mapNotice(row:any):Notice {
   const now = localIsoDate();
-  const status:Notice["status"] = row.archived_at ? "expired" : row.display_start <= now && row.display_end >= now ? "live" : row.display_start > now ? "scheduled" : "expired";
+  const isLiveToday=noticeRowMatchesDate(row,now);
+  const status:Notice["status"] = row.archived_at
+    ? "expired"
+    : isLiveToday
+      ? "live"
+      : row.display_end>=now
+        ? "scheduled"
+        : "expired";
   const priority:Notice["priority"] = row.priority_level === 3 ? "urgent" : row.priority_level === 2 ? "important" : "normal";
   return {
     id: row.id,
