@@ -789,84 +789,102 @@ export default function MonthlySetupPage({
         </div>
       </div>
 
-      {monthFastDays.length>0&&(
-        <div className="panel fastDaysPanel">
-          <div className="panelHead">
+      <div className="panel monthlyMonthPanel">
+        <div className="panelHead monthlyMonthPicker">
+          <div>
+            <span className="eyebrow">Jewish month</span>
+            <h2>Choose the Month You’re Working On</h2>
+            <p className="helperText">Everything below updates to show only the fast days and special schedule items for the selected Jewish month.</p>
+          </div>
+          <label className="monthlyMonthSelect">
+            <span>Month</span>
+            <select value={month} onChange={e=>setMonth(e.target.value)}>
+              {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="monthlyMonthCurrent">
+          <span>Working on</span>
+          <strong>{month}</strong>
+        </div>
+
+        {monthFastDays.length>0&&(
+          <section className="monthlySection">
+            <div className="monthlySectionHead">
+              <div>
+                <span className="eyebrow">Fast days</span>
+                <h3>{month} Fast-Day Schedule</h3>
+                <p className="helperText">Automatic fast times come from the configured MyZmanim rules. Override an individual fast only when needed.</p>
+              </div>
+            </div>
+
+            <div className="fastDayList">
+              {monthFastDays.map(fast=>{
+                const override=fastOverrides[fast.key] ?? {};
+                const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
+                return (
+                  <div className="fastDayRow" key={fast.key}>
+                    <div className="fastName">
+                      <strong>{fast.name}</strong>
+                      <small>{fast.startSource} · ZIP {postalCode}</small>
+                    </div>
+
+                    <label>
+                      <span>Fast begins</span>
+                      <div className="generatedTime">
+                        {override.start ? displayTime(override.start) : fast.autoStart}
+                        <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
+                      </div>
+                      <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
+                    </label>
+
+                    <label>
+                      <span>Fast ends</span>
+                      <div className="generatedTime">
+                        {override.end ? displayTime(override.end) : automaticEnd}
+                        <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
+                      </div>
+                      <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
+                    </label>
+
+                    <button className="secondary" onClick={()=>setFastOverrides(v=>{const next={...v};delete next[fast.key];return next;})}>Use Automatic</button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="monthlySection">
+          <div className="monthlySectionHead">
             <div>
-              <span className="eyebrow">Fast days · {month}</span>
-              <h2>Fast Start & End Times</h2>
-              <p className="helperText">Only fasts in {month} are shown here. Automatic times come from the configured MyZmanim rules; override an individual fast only when needed.</p>
+              <span className="eyebrow">Special schedule</span>
+              <h3>{month} Special Times</h3>
+              <p className="helperText">Enter only the shul-specific times that differ from the regular schedule. Automatic zmanim remain controlled in Settings.</p>
             </div>
           </div>
 
-          <div className="fastDayList">
-            {monthFastDays.map(fast=>{
-              const override=fastOverrides[fast.key] ?? {};
-              const automaticEnd=formatMinutes(fast.sunsetMinutes+fastEndRule);
-              return (
-                <div className="fastDayRow" key={fast.key}>
-                  <div className="fastName">
-                    <strong>{fast.name}</strong>
-                    <small>{fast.startSource} · ZIP {postalCode}</small>
-                  </div>
+          {template.specialItems.length ? (
+            <div className="specialSetupGrid">
+              {template.specialItems.map(item=>(
+                <label key={item.key} className="specialSetupField">
+                  <span>{item.label}</span>
+                  <small>{item.appliesTo}</small>
+                  <input type="time" value={values[item.key] || ""} onChange={e=>setValues(v=>({...v,[item.key]:e.target.value}))} />
+                  {item.helpText && <small>{item.helpText}</small>}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <div className="emptyMonthSetup">No standard shul-entered special times are needed for {month}.</div>
+          )}
 
-                  <label>
-                    <span>Fast begins</span>
-                    <div className="generatedTime">
-                      {override.start ? displayTime(override.start) : fast.autoStart}
-                      <small>{override.start ? "Manual override" : "MyZmanim generated"}</small>
-                    </div>
-                    <input type="time" value={override.start || ""} onChange={e=>setFastOverride(fast.key,"start",e.target.value)} aria-label={`Override ${fast.name} start`} />
-                  </label>
-
-                  <label>
-                    <span>Fast ends</span>
-                    <div className="generatedTime">
-                      {override.end ? displayTime(override.end) : automaticEnd}
-                      <small>{override.end ? "Manual override" : `MyZmanim sunset + ${fastEndRule} min`}</small>
-                    </div>
-                    <input type="time" value={override.end || ""} onChange={e=>setFastOverride(fast.key,"end",e.target.value)} aria-label={`Override ${fast.name} end`} />
-                  </label>
-
-                  <button className="secondary" onClick={()=>setFastOverrides(v=>{const next={...v};delete next[fast.key];return next;})}>Use Automatic</button>
-                </div>
-              );
-            })}
+          <div className="monthlySetupActions">
+            <span>{status}</span>
+            <button className="primary" onClick={saveMonth}>Save & Auto-Populate {month}</button>
           </div>
-        </div>
-      )}
-
-      <div className="panel">
-        <div className="panelHead">
-          <div>
-            <span className="eyebrow">Jewish month</span>
-            <h2>{month} Special Times</h2>
-            <p className="helperText">Only fields likely to matter for this month are shown. Zmanim-generated fields remain automatic unless overridden above.</p>
-          </div>
-          <select value={month} onChange={e=>setMonth(e.target.value)}>
-            {jewishMonthTemplates.map(item=><option key={item.month}>{item.month}</option>)}
-          </select>
-        </div>
-
-        {template.specialItems.length ? (
-          <div className="specialSetupGrid">
-            {template.specialItems.map(item=>(
-              <label key={item.key} className="specialSetupField">
-                <span>{item.label}</span>
-                <small>{item.appliesTo}</small>
-                <input type="time" value={values[item.key] || ""} onChange={e=>setValues(v=>({...v,[item.key]:e.target.value}))} />
-                {item.helpText && <small>{item.helpText}</small>}
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="emptyMonthSetup">No standard shul-entered special times are needed for {month}.</div>
-        )}
-
-        <div className="monthlySetupActions">
-          <span>{status}</span>
-          <button className="primary" onClick={saveMonth}>Save & Auto-Populate {month}</button>
-        </div>
+        </section>
       </div>
     </>
   );
