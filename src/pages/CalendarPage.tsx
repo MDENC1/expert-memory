@@ -1274,6 +1274,31 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const selectedDayNotices=selectedDay
     ? notices.filter(notice=>noticeMatchesDate(notice,selectedDay))
     : [];
+  const monthlyEventSuggestions=useMemo(()=>{
+    if(selected.length!==1)return [] as SpecialEntry[];
+    const rows=entriesMap.get(selected[0])||[];
+    const seen=new Set<string>();
+    return rows.filter(row=>{
+      const isMonthlyEvent=row.note==="monthly_custom_event"||/simchas beis hashoeva/i.test(row.title);
+      if(!isMonthlyEvent)return false;
+      const key=`${row.title.trim().toLowerCase()}|${row.event_time||""}`;
+      if(seen.has(key))return false;
+      seen.add(key);
+      return true;
+    });
+  },[selected,entriesMap]);
+
+  const useMonthlyEventSuggestion=(entry:SpecialEntry)=>{
+    setNewType("Event");
+    setNewHeadline(entry.title);
+    setNewTime(entry.event_time?prettyTime(entry.event_time):"");
+    setNewRecurring(false);
+    if(selected.length===1){
+      setNewStartAt(selected[0]);
+      setNewEndAt(selected[0]);
+    }
+  };
+
 
   const addToSelectedDates=async(mode:"scheduled"|"immediate")=>{
     if(!selected.length||!newHeadline.trim())return;
@@ -1758,6 +1783,28 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               </div>
               <button className="calendarModalClose" aria-label="Close" onClick={()=>{setShowAdd(false);setEditingNoticeId(null)}}>×</button>
             </div>
+
+            {!editingNoticeId&&selected.length===1&&monthlyEventSuggestions.length>0&&(
+              <div className="calendarMonthlyEventSuggestions">
+                <div className="calendarMonthlyEventSuggestionsHead">
+                  <strong>From Monthly Setup</strong>
+                  <span>Events configured for this date</span>
+                </div>
+                <div className="calendarMonthlyEventSuggestionList">
+                  {monthlyEventSuggestions.map((entry,index)=>(
+                    <button
+                      type="button"
+                      className="calendarMonthlyEventSuggestion"
+                      key={entry.title+"-"+(entry.event_time||"")+"-"+index}
+                      onClick={()=>useMonthlyEventSuggestion(entry)}
+                    >
+                      <strong>{entry.title}</strong>
+                      {entry.event_time&&<span>{prettyTime(entry.event_time)}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="formGrid calendarContentGrid">
               <label>
