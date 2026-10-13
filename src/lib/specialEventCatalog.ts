@@ -13,6 +13,11 @@ const MENORAH_LIGHTING:LinkedSpecialEvent={
   label:"Menorah Lighting"
 };
 
+const CHANUKAH_PARTY:LinkedSpecialEvent={
+  key:"chanukah_party",
+  label:"Chanukah Party"
+};
+
 function normalizeHebrewMonth(value:string){
   const aliases:Record<string,string>={
     Tishri:"Tishrei",
@@ -69,7 +74,7 @@ export function linkedSpecialEventsForDate(
   }
 
   if(isChanukahDate(date)){
-    results.push(MENORAH_LIGHTING);
+    results.push(MENORAH_LIGHTING,CHANUKAH_PARTY);
   }
 
   return results;
