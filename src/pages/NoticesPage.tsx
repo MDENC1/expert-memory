@@ -186,7 +186,7 @@ export default function NoticesPage({
       recurrence_type:doesRecur?frequency:null,
       recurrence_weekdays:doesRecur&&frequency==="weekly"?weekdays:[],
       recurrence_month_days:doesRecur&&frequency==="monthly"?monthDays:[],
-      recurrence_excluded_dates:editingNotice?.recurrence?.excludedDates||[],
+      recurrence_excluded_dates:doesRecur?(editingNotice?.recurrence?.excludedDates||[]):[],
       active:true,
       priority_level:2,
       updated_at:new Date().toISOString(),
