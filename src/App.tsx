@@ -913,6 +913,8 @@ export default function App() {
             locationId={myzmanimLocationId}
             shulId={currentShulId}
             focusDate={calendarFocusDate}
+            remainingPushes={remainingPushes}
+            usePush={() => setPushesUsed(v => Math.min(2, v + 1))}
           />
         )}
 
