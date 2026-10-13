@@ -1816,13 +1816,73 @@ body{color:#172b26}
   font-weight:850;
   color:#29423b;
 }
-.monthlyMonthSelect select{
+.monthlyMonthDropdown{
+  position:relative;
+}
+.monthlyMonthDropdownButton{
+  width:100%;
+  min-height:46px;
+  display:flex;
+  align-items:center;
+  gap:7px;
   border:1px solid #cbdcd6;
   border-radius:9px;
-  padding:10px 12px;
+  padding:8px 11px;
   background:#fff;
   color:#20312d;
+  cursor:pointer;
+  text-align:left;
+}
+.monthlyMonthEnglish{
+  font-size:13px;
   font-weight:800;
+}
+.monthlyMonthDash{
+  font-size:13px;
+  font-weight:700;
+  color:#6a7975;
+}
+.monthlyMonthHebrew{
+  font-size:18px;
+  line-height:1;
+  font-weight:850;
+}
+.monthlyMonthCaret{
+  margin-left:auto;
+  font-size:12px;
+  color:#657570;
+}
+.monthlyMonthDropdownMenu{
+  position:absolute;
+  z-index:40;
+  top:calc(100% + 5px);
+  left:0;
+  right:0;
+  display:grid;
+  max-height:340px;
+  overflow:auto;
+  padding:5px;
+  border:1px solid #cbdcd6;
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(24,50,42,.14);
+}
+.monthlyMonthOption{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  width:100%;
+  border:0;
+  border-radius:7px;
+  padding:8px 9px;
+  background:transparent;
+  color:#20312d;
+  cursor:pointer;
+  text-align:left;
+}
+.monthlyMonthOption:hover,
+.monthlyMonthOption.active{
+  background:#eef7f3;
 }
 .monthlyMonthCurrent{
   display:flex;
