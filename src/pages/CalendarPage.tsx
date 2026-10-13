@@ -3,6 +3,7 @@ import type { CalendarDay, Notice, NoticeType, RecurrenceFrequency } from "../ty
 import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
+import { linkedSpecialEventsForDate } from "../lib/specialEventCatalog";
 
 type Props = {
   notices: Notice[];
@@ -258,6 +259,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const [selected,setSelected] = useState<string[]>([]);
   const [showAdd,setShowAdd] = useState(false);
   const [newType,setNewType] = useState<NoticeType>("General Notice");
+  const [newLinkedSpecialEventKey,setNewLinkedSpecialEventKey] = useState("");
   const [newHeadline,setNewHeadline] = useState("");
   const [newDetails,setNewDetails] = useState("");
   const [newTime,setNewTime] = useState("");
@@ -1244,6 +1246,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const sorted=[...selected].sort();
     setEditingNoticeId(null);
     setNewType("General Notice");
+    setNewLinkedSpecialEventKey("");
     setNewHeadline("");
     setNewDetails("");
     setNewTime("");
@@ -1258,6 +1261,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
 
   const openEditModal=(notice:Notice)=>{
     setEditingNoticeId(notice.id);
+    setNewLinkedSpecialEventKey("");
     setNewType(notice.type);
     setNewHeadline(notice.headline);
     setNewDetails(notice.details);
@@ -1274,31 +1278,48 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
   const selectedDayNotices=selectedDay
     ? notices.filter(notice=>noticeMatchesDate(notice,selectedDay))
     : [];
-  const monthlyEventSuggestions=useMemo(()=>{
-    if(selected.length!==1)return [] as SpecialEntry[];
-    const rows=entriesMap.get(selected[0])||[];
-    const seen=new Set<string>();
-    return rows.filter(row=>{
-      const isMonthlyEvent=row.note==="monthly_custom_event"||/simchas beis hashoeva/i.test(row.title);
-      if(!isMonthlyEvent)return false;
-      const key=`${row.title.trim().toLowerCase()}|${row.event_time||""}`;
-      if(seen.has(key))return false;
-      seen.add(key);
-      return true;
+  const linkedSpecialEventOptions=useMemo(()=>{
+    if(selected.length!==1)return [] as Array<{key:string;label:string;time:string}>;
+    const date=selected[0];
+    const isCholHamoed=(hebcalEventMap.get(date)||[]).some(event=>event.is_chol_hamoed);
+    const eligible=linkedSpecialEventsForDate(date,{isCholHamoed});
+    const savedRows=entriesMap.get(date)||[];
+
+    return eligible.map(option=>{
+      const matching=savedRows.filter(row=>
+        (row.note==="monthly_custom_event"||row.title===option.label)&&
+        row.title.trim().toLowerCase()===option.label.toLowerCase()
+      );
+      const savedTimes=matching.map(row=>row.event_time).filter((value):value is string=>Boolean(value));
+      return {
+        ...option,
+        time:savedTimes.length===1?prettyTime(savedTimes[0]):""
+      };
     });
-  },[selected,entriesMap]);
+  },[selected,hebcalEventMap,entriesMap]);
 
-  const useMonthlyEventSuggestion=(entry:SpecialEntry)=>{
-    setNewType("Event");
-    setNewHeadline(entry.title);
-    setNewTime(entry.event_time?prettyTime(entry.event_time):"");
-    setNewRecurring(false);
-    if(selected.length===1){
-      setNewStartAt(selected[0]);
-      setNewEndAt(selected[0]);
+  const selectContentChoice=(value:string)=>{
+    if(value.startsWith("special:")){
+      const key=value.slice("special:".length);
+      const option=linkedSpecialEventOptions.find(item=>item.key===key);
+      if(!option)return;
+      setNewLinkedSpecialEventKey(key);
+      setNewType("Event");
+      setNewHeadline(option.label);
+      setNewTime(option.time);
+      setNewRecurring(false);
+      if(selected.length===1){
+        setNewStartAt(selected[0]);
+        setNewEndAt(selected[0]);
+      }
+      return;
     }
-  };
 
+    const type=value.slice("type:".length) as NoticeType;
+    setNewLinkedSpecialEventKey("");
+    setNewType(type);
+    setNewRecurring(false);
+  };
 
   const addToSelectedDates=async(mode:"scheduled"|"immediate")=>{
     if(!selected.length||!newHeadline.trim())return;
@@ -1784,34 +1805,31 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
               <button className="calendarModalClose" aria-label="Close" onClick={()=>{setShowAdd(false);setEditingNoticeId(null)}}>×</button>
             </div>
 
-            {!editingNoticeId&&selected.length===1&&monthlyEventSuggestions.length>0&&(
-              <div className="calendarMonthlyEventSuggestions">
-                <div className="calendarMonthlyEventSuggestionsHead">
-                  <strong>From Monthly Setup</strong>
-                  <span>Events configured for this date</span>
-                </div>
-                <div className="calendarMonthlyEventSuggestionList">
-                  {monthlyEventSuggestions.map((entry,index)=>(
-                    <button
-                      type="button"
-                      className="calendarMonthlyEventSuggestion"
-                      key={entry.title+"-"+(entry.event_time||"")+"-"+index}
-                      onClick={()=>useMonthlyEventSuggestion(entry)}
-                    >
-                      <strong>{entry.title}</strong>
-                      {entry.event_time&&<span>{prettyTime(entry.event_time)}</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="formGrid calendarContentGrid">
               <label>
                 Type
-                <select value={newType} onChange={e=>{setNewType(e.target.value as NoticeType);setNewRecurring(false);}}>
-                  {noticeTypes.map(type=><option key={type}>{type}</option>)}
+                <select
+                  value={newLinkedSpecialEventKey?`special:${newLinkedSpecialEventKey}`:`type:${newType}`}
+                  onChange={e=>selectContentChoice(e.target.value)}
+                >
+                  {!editingNoticeId&&linkedSpecialEventOptions.length>0&&(
+                    <optgroup label="Special events for this date">
+                      {linkedSpecialEventOptions.map(option=>(
+                        <option key={option.key} value={`special:${option.key}`}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Notice / event types">
+                    {noticeTypes.map(type=>(
+                      <option key={type} value={`type:${type}`}>{type}</option>
+                    ))}
+                  </optgroup>
                 </select>
+                {!editingNoticeId&&newLinkedSpecialEventKey&&(
+                  <small>Linked to Monthly Setup eligibility for this date.</small>
+                )}
               </label>
 
               {newContentNeedsTime && (
