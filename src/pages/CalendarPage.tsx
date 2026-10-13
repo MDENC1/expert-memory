@@ -227,15 +227,29 @@ function shiftIsoDate(date:string,days:number){
   return isoDate(d);
 }
 
-function noticeMatchesDate(notice:Notice,date:string) {
-  if (date < notice.startAt || date > notice.endAt) return false;
-  if (!notice.recurrence?.enabled) return true;
+function defaultRecurrenceEnd(date:string){
+  const d=new Date(`${date}T12:00:00`);
+  d.setFullYear(d.getFullYear()+1);
+  return isoDate(d);
+}
 
-  const d = new Date(`${date}T12:00:00`);
-  if (notice.recurrence.frequency === "daily") return true;
-  if (notice.recurrence.frequency === "weekly") return notice.recurrence.weekdays?.includes(d.getDay()) ?? false;
-  if (notice.recurrence.frequency === "monthly") return notice.recurrence.monthDays?.includes(d.getDate()) ?? false;
-  return true;
+function noticeMatchesDate(notice:Notice,date:string) {
+  if(date<notice.startAt||date>notice.endAt)return false;
+  if(!notice.recurrence?.enabled)return true;
+
+  const d=new Date(`${date}T12:00:00`);
+  if(notice.recurrence.frequency==="daily")return true;
+  if(notice.recurrence.frequency==="weekly"){
+    return Boolean(notice.recurrence.weekdays?.includes(d.getDay()));
+  }
+  if(notice.recurrence.frequency==="monthly"){
+    return Boolean(notice.recurrence.monthDays?.includes(d.getDate()));
+  }
+
+  // Yearly Hebrew recurrence needs Hebrew month/day metadata before it can
+  // be safely painted across the calendar. Do not incorrectly show it daily.
+  if(notice.recurrence.frequency==="yearly_hebrew")return date===notice.startAt;
+  return false;
 }
 
 export default function CalendarPage({notices,setNotices,scheduleEntries,shulName,postalCode,countryCode,locationId,shulId,focusDate="",remainingPushes,usePush}:Props) {
@@ -1379,7 +1393,12 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                     {rows.slice(0,4).map((r,i)=><span key={i}><b>{r.label}</b> {r.time}</span>)}
                     {rows.length>4 && <span>+{rows.length-4} more</span>}
                   </div>
-                  {matching.slice(0,2).map(n=><div className="eventTag" key={n.id}>{n.eventTime && <b>{n.eventTime} · </b>}{n.headline}</div>)}
+                  {matching.slice(0,2).map(n=>(
+                    <div className="eventTag" key={n.id}>
+                      {n.recurrence?.enabled&&<span className="recurringDot" title="Recurring">↻</span>}
+                      {n.eventTime&&<b>{n.eventTime} · </b>}{n.headline}
+                    </div>
+                  ))}
                 </button>
               );
             })}
@@ -1597,10 +1616,20 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             {canNewContentRecur&&(
               <div className="recurrenceBox calendarRecurrenceBox">
                 <label className="checkRow">
-                  <input type="checkbox" checked={newRecurring} onChange={e=>setNewRecurring(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={newRecurring}
+                    onChange={e=>{
+                      const checked=e.target.checked;
+                      setNewRecurring(checked);
+                      if(checked&&newStartAt&&(!newEndAt||newEndAt<=newStartAt)){
+                        setNewEndAt(defaultRecurrenceEnd(newStartAt));
+                      }
+                    }}
+                  />
                   <span>
                     <strong>Recurring?</strong>
-                    <small>Set this once instead of recreating the notice or event.</small>
+                    <small>Set this once instead of recreating the notice or event. Matching days will appear on the Calendar through the display end date.</small>
                   </span>
                 </label>
 
@@ -1636,7 +1665,10 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
                       </div>
                     )}
 
-                    <div className="recurrenceSummary">{recurrenceSummary}</div>
+                    <div className="recurrenceSummary">
+                      {recurrenceSummary}
+                      {newStartAt&&newEndAt&&<span className="recurrenceRange"> · ${newStartAt} → ${newEndAt}</span>}
+                    </div>
                   </>
                 )}
               </div>
