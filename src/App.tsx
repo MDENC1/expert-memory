@@ -387,6 +387,14 @@ function buildLiveDay(
   const today=localIsoDate(now);
   const h=hebrewParts(now);
   const dow=now.getDay();
+  const sunsetMinutes=timeMinutesFromIso(zmanim.sunset?.[today]);
+  const candleLightingMinutes=timeMinutesFromIso(zmanim.candleLighting?.[today]);
+  const fridayCandleLighting=dow===5
+    ? (candleLightingMinutes??(sunsetMinutes!==null?sunsetMinutes-18:null))
+    : null;
+  const shabbosEnds=dow===6&&sunsetMinutes!==null
+    ? sunsetMinutes+shabbosEndMinutes
+    : null;
 
   const base:CalendarDay={
     date:today,
@@ -401,7 +409,22 @@ function buildLiveDay(
       : (specialDay?.title || specialRequirement?.title || undefined),
     template:(!isGenericSpecialTitle(specialDay?.title) ? specialDay?.title : undefined)
       || specialRequirement?.group_label
-      || (dow===6 ? "Shabbos" : "Regular")
+      || (dow===6 ? "Shabbos" : "Regular"),
+    specialTimes:fridayCandleLighting!==null
+      ? [{
+          key:"candle_lighting",
+          label:"Candle Lighting",
+          time:minutesToDisplay(fridayCandleLighting),
+          importance:"prominent"
+        }]
+      : shabbosEnds!==null
+        ? [{
+            key:"shabbos_ends",
+            label:"Shabbos Ends",
+            time:minutesToDisplay(shabbosEnds),
+            importance:"prominent"
+          }]
+        : undefined
   };
 
   if(manualOverrides.length){
