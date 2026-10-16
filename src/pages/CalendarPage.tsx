@@ -4,6 +4,7 @@ import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import MagnetPreview from "../components/MagnetPreview";
 import { supabase } from "../lib/supabase";
 import { linkedSpecialEventsForDate } from "../lib/specialEventCatalog";
+import { isSederChatzosDate, omerTextForDate } from "../lib/jewishCalendarDisplay";
 
 type Props = {
   notices: Notice[];
@@ -50,6 +51,7 @@ type ZmanimBatch = {
   sunrise?: Record<string,string>;
   latestShema?: Record<string,string>;
   midday?: Record<string,string>;
+  midnight?: Record<string,string>;
   candleLighting?: Record<string,string>;
   sources?: Record<string,Record<string,string>>;
 };
@@ -712,6 +714,22 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const dow=d.getDay();
     const sunset=timeMinutesFromIso(zmanim.sunset?.[date]);
     const myZmanimCandleLighting=timeMinutesFromIso(zmanim.candleLighting?.[date]);
+    const sederChatzos=isSederChatzosDate(date)
+      ?timeMinutesFromIso(zmanim.midnight?.[date]||zmanim.sources?.midnight?.[date])
+      :null;
+
+    const withSederChatzos=(items:NonNullable<CalendarDay["specialTimes"]>)=>{
+      if(sederChatzos===null)return items;
+      return [
+        ...items,
+        {
+          key:"seder_chatzos",
+          label:"Chatzos HaLailah",
+          time:minutesToDisplay(sederChatzos),
+          importance:"prominent" as const
+        }
+      ];
+    };
 
     const currentYomTov=(hebcalEventMap.get(date)||[]).find(event=>event.yomtov);
     const nextDate=shiftIsoDate(date,1);
@@ -723,22 +741,22 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     if(dow===5&&!currentYomTov&&!nextYomTov){
       const fridayTime=myZmanimCandleLighting
         ?? (sunset!==null ? sunset-18 : null);
-      return fridayTime===null ? [] : [{
+      return withSederChatzos(fridayTime===null ? [] : [{
         key:"candle_lighting",
         label:"Candle Lighting",
         time:minutesToDisplay(fridayTime),
         importance:"prominent" as const
-      }];
+      }]);
     }
 
-    if(sunset===null)return [];
+    if(sunset===null)return withSederChatzos([]);
     const endThreshold=sunset+shabbosEndMinutes;
 
     // Yom Tov transitions always take precedence over ordinary
     // Friday candle-lighting and Shabbos-ending labels.
     if(nextYomTov){
       if(currentYomTov){
-        return [
+        return withSederChatzos([
           {
             key:"begin_prep_after",
             label:"Begin Prep After",
@@ -751,11 +769,11 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             time:minutesToDisplay(endThreshold),
             importance:"prominent" as const
           }
-        ];
+        ]);
       }
 
       if(/yom kippur/i.test(nextYomTov.title)){
-        return [
+        return withSederChatzos([
           {
             key:"candle_lighting",
             label:"Candle Lighting",
@@ -768,57 +786,57 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
             time:minutesToDisplay(sunset),
             importance:"prominent" as const
           }
-        ];
+        ]);
       }
 
-      return [{
+      return withSederChatzos([{
         key:"yom_tov_candle_lighting",
         label:"Yom Tov Candle Lighting",
         time:minutesToDisplay(dow===6 ? endThreshold : (myZmanimCandleLighting??(sunset-18))),
         importance:"prominent" as const
-      }];
+      }]);
     }
 
     if(currentYomTov){
       if(/yom kippur/i.test(currentYomTov.title)){
-        return [{
+        return withSederChatzos([{
           key:"fast_ends",
           label:"Fast Ends",
           time:minutesToDisplay(endThreshold),
           importance:"prominent" as const
-        }];
+        }]);
       }
 
-      return [{
+      return withSederChatzos([{
         key:"yom_tov_ends",
         label:"Yom Tov Ends",
         time:minutesToDisplay(endThreshold),
         importance:"prominent" as const
-      }];
+      }]);
     }
 
     if(dow===5){
-      return [{
+      return withSederChatzos([{
         key:"candle_lighting",
         label:"Candle Lighting",
         time:minutesToDisplay(myZmanimCandleLighting??(sunset-18)),
         importance:"prominent" as const
-      }];
+      }]);
     }
 
     if(dow===6){
       // Non-Yom-Tov special schedules (for example Parshas Bereishis,
       // a bar mitzvah, or another special Shabbos schedule) still need
       // the normal Shabbos-ending time. Yom Tov was already handled above.
-      return [{
+      return withSederChatzos([{
         key:"shabbos_ends",
         label:"Shabbos Ends",
         time:minutesToDisplay(endThreshold),
         importance:"prominent" as const
-      }];
+      }]);
     }
 
-    return [];
+    return withSederChatzos([]);
   };
 
   const specialResolvedTime=(date:string,special:SpecialDay|undefined,row:SpecialEntry)=>{
@@ -959,6 +977,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     hebrewDate:selectedCell.hebrewDay,
     hebrewMonth:selectedCell.hebrewMonth,
     dafYomi:hebcalDafYomi[selectedCell.date],
+    omerText:omerTextForDate(selectedCell.date),
     isRoshChodesh:selectedCell.isRoshChodesh,
     isShabbos:selectedCell.isShabbos,
     holiday:(selectedSpecial?.title && !isInternalSpecialDayTitle(selectedSpecial.title)
