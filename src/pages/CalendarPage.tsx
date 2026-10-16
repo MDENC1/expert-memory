@@ -711,11 +711,27 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
     const d=new Date(`${date}T12:00:00`);
     const dow=d.getDay();
     const sunset=timeMinutesFromIso(zmanim.sunset?.[date]);
-    if(sunset===null)return [];
+    const myZmanimCandleLighting=timeMinutesFromIso(zmanim.candleLighting?.[date]);
 
     const currentYomTov=(hebcalEventMap.get(date)||[]).find(event=>event.yomtov);
     const nextDate=shiftIsoDate(date,1);
     const nextYomTov=(hebcalEventMap.get(nextDate)||[]).find(event=>event.yomtov);
+
+    // Ordinary Friday candle lighting must not depend on sunset also being
+    // present. Prefer MyZmanim's dedicated Candle Lighting value and use
+    // sunset - 18 only as a fallback.
+    if(dow===5&&!currentYomTov&&!nextYomTov){
+      const fridayTime=myZmanimCandleLighting
+        ?? (sunset!==null ? sunset-18 : null);
+      return fridayTime===null ? [] : [{
+        key:"candle_lighting",
+        label:"Candle Lighting",
+        time:minutesToDisplay(fridayTime),
+        importance:"prominent" as const
+      }];
+    }
+
+    if(sunset===null)return [];
     const endThreshold=sunset+shabbosEndMinutes;
 
     // Yom Tov transitions always take precedence over ordinary
@@ -743,7 +759,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
           {
             key:"candle_lighting",
             label:"Candle Lighting",
-            time:minutesToDisplay(sunset-18),
+            time:minutesToDisplay(myZmanimCandleLighting??(sunset-18)),
             importance:"prominent" as const
           },
           {
@@ -758,7 +774,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       return [{
         key:"yom_tov_candle_lighting",
         label:"Yom Tov Candle Lighting",
-        time:minutesToDisplay(dow===6 ? endThreshold : sunset-18),
+        time:minutesToDisplay(dow===6 ? endThreshold : (myZmanimCandleLighting??(sunset-18))),
         importance:"prominent" as const
       }];
     }
@@ -785,7 +801,7 @@ export default function CalendarPage({notices,setNotices,scheduleEntries,shulNam
       return [{
         key:"candle_lighting",
         label:"Candle Lighting",
-        time:minutesToDisplay(sunset-18),
+        time:minutesToDisplay(myZmanimCandleLighting??(sunset-18)),
         importance:"prominent" as const
       }];
     }
