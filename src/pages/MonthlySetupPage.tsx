@@ -4,6 +4,7 @@ import type { HebcalSpecialEvent, LiveScheduleEntry } from "../App";
 import { jewishMonthTemplates } from "../data/mock";
 import { supabase } from "../lib/supabase";
 import { linkedSpecialEventsForDate } from "../lib/specialEventCatalog";
+import { isSederChatzosDate } from "../lib/jewishCalendarDisplay";
 
 type SpecialValues = Record<string,string[]>;
 type FastOverride = {start?:string;end?:string};
@@ -21,6 +22,7 @@ type FocusedSpecialUnit = {
 type FocusedZmanimBatch = {
   sunset?:Record<string,string>;
   candleLighting?:Record<string,string>;
+  midnight?:Record<string,string>;
   plagHaMincha?:Record<string,string>;
   sources?:Record<string,Record<string,string>>;
 };
@@ -976,7 +978,8 @@ export default function MonthlySetupPage({
           }
         });
 
-        const merged:FocusedZmanimBatch={sunset:{},candleLighting:{},plagHaMincha:{},sources:{}};
+        const merged:FocusedZmanimBatch={sunset:{},candleLighting:{},midnight:{},plagHaMincha:{},sources:{}};
+        let zmanimFailed=false;
 
         if(postalCode){
           let chunkStart=rangeStart;
@@ -993,11 +996,16 @@ export default function MonthlySetupPage({
               }
             });
             if(error||!data?.success){
-              throw new Error(data?.error||error?.message||"Could not load regular MyZmanim times.");
+              // Monthly Setup should remain usable while MyZmanim is unavailable.
+              // Schedule/event configuration can continue; automatic times simply
+              // display as unavailable until the API is restored.
+              zmanimFailed=true;
+              break;
             }
             const times=(data.times||{}) as FocusedZmanimBatch;
             merged.sunset={...(merged.sunset||{}),...(times.sunset||{})};
             merged.candleLighting={...(merged.candleLighting||{}),...(times.candleLighting||{})};
+            merged.midnight={...(merged.midnight||{}),...(times.midnight||{})};
             merged.plagHaMincha={...(merged.plagHaMincha||{}),...(times.plagHaMincha||{})};
             for(const [source,map] of Object.entries(times.sources||{})){
               merged.sources={
@@ -1018,7 +1026,7 @@ export default function MonthlySetupPage({
         }
 
         if(cancelled)return;
-        setMonthlyZmanim(merged);
+        setMonthlyZmanim(zmanimFailed?{}:merged);
         setMonthHebcalEvents((hebcalData.events||[]) as HebcalSpecialEvent[]);
       }catch(error){
         if(cancelled)return;
@@ -1915,6 +1923,9 @@ export default function MonthlySetupPage({
               const fastOverride=fastOverrides[card.date]||{};
               const isCollapsed=Boolean(collapsedDates[card.date]);
               const predefinedEvents=predefinedEventsForCard(card);
+              const sederChatzosMinutes=isSederChatzosDate(card.date)
+                ?focusedTimeMinutes(monthlyZmanim.midnight?.[card.date]||monthlyZmanim.sources?.midnight?.[card.date])
+                :null;
 
               return (
                 <section className="monthlyDateCard" key={card.date}>
@@ -2061,6 +2072,19 @@ export default function MonthlySetupPage({
                           Use Automatic Fast Times
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {isSederChatzosDate(card.date)&&(
+                    <div className="monthlyAdditionalBlock">
+                      <div className="monthlyAdditionalHead">
+                        <strong>Chatzos HaLailah · Afikoman</strong>
+                        <span>Automatic from MyZmanim for the Seder night connected to this screen. Admins do not need to enter it.</span>
+                      </div>
+                      <div className="monthlyGeneratedValue">
+                        <strong>{sederChatzosMinutes!==null?focusedPretty24(focusedMinutesTo24(sederChatzosMinutes)):"Automatic time unavailable"}</strong>
+                        <small>MyZmanim · automatic</small>
+                      </div>
                     </div>
                   )}
 
