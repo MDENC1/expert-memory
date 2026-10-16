@@ -203,6 +203,7 @@ Deno.serve(async (req) => {
     const sunrise: Record<string, string> = {};
     const latestShema: Record<string, string> = {};
     const midday: Record<string, string> = {};
+    const midnight: Record<string, string> = {};
     const sources: Record<string, Record<string,string>> = {};
     const sourceFields: Record<string,string> = {
       dawn_72fix: "Dawn72fix",
@@ -213,6 +214,7 @@ Deno.serve(async (req) => {
       shema_ma72fix: "ShemaMA72fix",
       midday: "Midday",
       midday_benish: "MiddayBenIsh72proprsToRaful",
+      midnight: "Midnight",
       mincha_gra: "MinchaGra",
       mincha_benish: "MinchaBenIsh72ToShabbos",
       mincha_ma72fix: "MinchaMA72fix",
@@ -305,6 +307,7 @@ Deno.serve(async (req) => {
       if (data?.Zman?.SunriseDefault) sunrise[date] = data.Zman.SunriseDefault;
       if (data?.Zman?.ShemaGra) latestShema[date] = data.Zman.ShemaGra;
       if (data?.Zman?.Midday) midday[date] = data.Zman.Midday;
+      if (data?.Zman?.Midnight) midnight[date] = data.Zman.Midnight;
 
       for (const [key,field] of Object.entries(sourceFields)) {
         const value = data?.Zman?.[field];
@@ -321,7 +324,7 @@ Deno.serve(async (req) => {
       source: "MyZmanim",
       location_id: locationId,
       place,
-      times: { plagHaMincha, sunset, sunrise, latestShema, midday, candleLighting, sources },
+      times: { plagHaMincha, sunset, sunrise, latestShema, midday, midnight, candleLighting, sources },
       cache: {
         hits: cachedDates.size,
         misses: missingDates.length
