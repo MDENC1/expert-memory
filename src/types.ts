@@ -34,6 +34,7 @@ export type CalendarDay = {
   zmanimRows?: Array<{label:string;time:string}>;
   hebrewFullDate?: string;
   dafYomi?: string;
+  omerText?: string;
   shulScheduleRows?: Array<{label:string;time?:string;note?:string}>;
 };
 
