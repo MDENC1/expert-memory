@@ -57,12 +57,45 @@ const STATIC_MONTHLY_DATES:Record<string,Array<{
   day:number;
   title:string;
   additional:MonthlyAdditionalField[];
+  replaceSchedule?:boolean;
 }>>={
+  Teves:[
+    {day:10,title:"Asarah B'Teves",additional:[],replaceSchedule:true}
+  ],
   Shevat:[
-    {day:15,title:"Tu B'Shvat",additional:[{key:"tu_bishvat_event",label:"Tu B'Shvat Program"}]}
+    {day:15,title:"Tu B'Shvat",additional:[]}
+  ],
+  Adar:[
+    {
+      day:13,
+      title:"Purim Night",
+      additional:[{key:"megillah_night",label:"Megillah - Night",allowMultiple:true}],
+      replaceSchedule:true
+    },
+    {
+      day:14,
+      title:"Purim",
+      additional:[{key:"megillah_day",label:"Megillah - Day",allowMultiple:true}],
+      replaceSchedule:true
+    }
+  ],
+  Nissan:[
+    {day:14,title:"Erev Pesach",additional:[],replaceSchedule:true}
   ],
   Iyar:[
-    {day:18,title:"Lag B'Omer",additional:[{key:"lag_baomer",label:"Lag B'Omer Program"}]}
+    {day:18,title:"Lag B'Omer",additional:[]}
+  ],
+  Sivan:[
+    {day:5,title:"Erev Shavuos",additional:[],replaceSchedule:true}
+  ],
+  Tammuz:[
+    {day:17,title:"17 Tammuz",additional:[],replaceSchedule:true}
+  ],
+  Av:[
+    {day:15,title:"Tu B'Av",additional:[]}
+  ],
+  Elul:[
+    {day:29,title:"Erev Rosh Hashana",additional:[{key:"hataras_nedarim",label:"Hataras Nedarim"}],replaceSchedule:true}
   ]
 };
 
@@ -196,24 +229,21 @@ function monthlyAdditionalFields(title:string):MonthlyAdditionalField[]{
       {key:"hakafos_day",label:"Hakafos - Day"}
     );
   }
-  if(t.includes("purim")&&!t.includes("katan")){
-    fields.push(
-      {key:"megillah_night",label:"Megillah - Night"},
-      {key:"megillah_day",label:"Megillah - Day"}
-    );
+  if(
+    t.includes("purim")&&
+    !t.includes("katan")&&
+    !t.includes("shushan")&&
+    !t.includes("night")
+  ){
+    fields.push({key:"megillah_day",label:"Megillah - Day",allowMultiple:true});
   }
   if(t.includes("selich")){
-    fields.push({key:"selichos",label:"Selichos"});
+    fields.push({key:"selichos",label:"Selichos",allowMultiple:true});
   }
-  if(t.includes("erev pesach")){
-    fields.push(
-      {key:"siyum_bechorim",label:"Siyum Bechorim"},
-      {key:"chametz_stop",label:"Stop Eating Chametz"},
-      {key:"chametz_burn",label:"Burn / Sell Chametz By"}
-    );
+  if(t.includes("erev rosh hashana")){
+    fields.push({key:"hataras_nedarim",label:"Hataras Nedarim"});
   }
   if(t.includes("shavuot")||t.includes("shavuos")){
-    if(!/ii|2/.test(t))fields.push({key:"shavuos_learning",label:"Shavuos Night Learning"});
     if(/ii|2/.test(t))fields.push({key:"shavuos_yizkor",label:"Yizkor"});
   }
   if(t.includes("pesach")&&(/viii|8/.test(t)))fields.push({key:"pesach_yizkor",label:"Yizkor"});
@@ -1064,6 +1094,7 @@ export default function MonthlySetupPage({
       (entriesRes.data||[]).forEach((row:any,index:number)=>{
         const title=String(row.title||"").trim();
         const isSavedCustom=row.note==="monthly_custom_event"
+          ||Boolean(row.linked_event_key)
           ||/simchas beis hashoeva/i.test(title)
           ||/menorah lighting/i.test(title)
           ||/chanukah party/i.test(title);
@@ -1105,28 +1136,47 @@ export default function MonthlySetupPage({
     for(const event of monthHebcalEvents){
       const title=event.title||"Special Date";
       const lower=title.toLowerCase();
-      const include=event.requires_confirmation||lower.includes("erev pesach")||lower.includes("selich");
+      const isCholHamoed=monthlyIsCholHamoedEvent(event);
+      const linkedEvents=linkedSpecialEventsForDate(event.date,{isCholHamoed,title});
+      const scheduleDriven=
+        event.requires_confirmation||
+        event.blocks_regular_schedule||
+        lower.includes("erev pesach")||
+        lower.includes("erev shavu")||
+        lower.includes("selich")||
+        monthlyIsFast(title);
+      const include=scheduleDriven||linkedEvents.length>0;
       if(!include)continue;
 
       const parts=hebrewPartsForDate(new Date(`${event.date}T12:00:00`));
       if(normalizeHebrewMonthName(parts.month)!==month)continue;
+
+      const replaceSchedule=
+        !lower.includes("selich")&&
+        (
+          event.requires_confirmation||
+          event.blocks_regular_schedule||
+          lower.includes("erev pesach")||
+          lower.includes("erev shavu")||
+          monthlyIsFast(title)
+        );
 
       const existing=byDate.get(event.date);
       const additions=monthlyAdditionalFields(title);
       if(existing){
         const seen=new Set(existing.additional.map(item=>item.key));
         existing.additional.push(...additions.filter(item=>!seen.has(item.key)));
-        if(event.blocks_regular_schedule)existing.replaceSchedule=true;
-        if(event.blocks_regular_schedule)existing.title=title;
-        if(monthlyIsCholHamoedEvent(event))existing.isCholHamoed=true;
+        if(replaceSchedule)existing.replaceSchedule=true;
+        if(replaceSchedule)existing.title=title;
+        if(isCholHamoed)existing.isCholHamoed=true;
       }else{
         byDate.set(event.date,{
           date:event.date,
           hebrewDay:parts.day,
           title,
-          replaceSchedule:!lower.includes("selich"),
+          replaceSchedule,
           additional:additions,
-          isCholHamoed:monthlyIsCholHamoedEvent(event)
+          isCholHamoed
         });
       }
     }
@@ -1138,12 +1188,13 @@ export default function MonthlySetupPage({
       if(existing){
         const seen=new Set(existing.additional.map(field=>field.key));
         existing.additional.push(...item.additional.filter(field=>!seen.has(field.key)));
+        if(item.replaceSchedule)existing.replaceSchedule=true;
       }else{
         byDate.set(date,{
           date,
           hebrewDay:item.day,
           title:item.title,
-          replaceSchedule:false,
+          replaceSchedule:Boolean(item.replaceSchedule),
           additional:item.additional,
           isCholHamoed:false
         });
@@ -1193,6 +1244,39 @@ export default function MonthlySetupPage({
   };
 
   const customEventsForDate=(date:string)=>monthlyCustomEvents[date]||[];
+
+  const predefinedEventsForCard=(card:MonthlyDateCard)=>{
+    if(card.isCholHamoed)return [];
+    const linked=linkedSpecialEventsForDate(card.date,{
+      isCholHamoed:card.isCholHamoed,
+      title:card.title
+    });
+
+    // Kislev keeps the dedicated eight-night Chanukah chooser above the date cards.
+    if(month==="Kislev"){
+      return linked.filter(item=>item.key!=="menorah_lighting"&&item.key!=="chanukah_party");
+    }
+    return linked;
+  };
+
+  const customEventsByLabel=(date:string,label:string)=>customEventsForDate(date)
+    .filter(event=>event.label.trim().toLowerCase()===label.toLowerCase());
+
+  const addPredefinedMonthlyEvent=(date:string,label:string)=>{
+    setMonthlyCustomEvents(current=>({
+      ...current,
+      [date]:[
+        ...(current[date]||[]),
+        {
+          id:crypto.randomUUID(),
+          label,
+          time:"",
+          location:"",
+          details:""
+        }
+      ]
+    }));
+  };
 
   const chanukahEventsByLabel=(label:string)=>chanukahDates.flatMap(choice=>
     customEventsForDate(choice.date)
@@ -1830,6 +1914,7 @@ export default function MonthlySetupPage({
                 :null;
               const fastOverride=fastOverrides[card.date]||{};
               const isCollapsed=Boolean(collapsedDates[card.date]);
+              const predefinedEvents=predefinedEventsForCard(card);
 
               return (
                 <section className="monthlyDateCard" key={card.date}>
@@ -1976,6 +2061,78 @@ export default function MonthlySetupPage({
                           Use Automatic Fast Times
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {predefinedEvents.length>0&&(
+                    <div className="monthlyAdditionalBlock monthlySpecialEventsBlock">
+                      <div className="monthlyAdditionalHead">
+                        <div>
+                          <span className="eyebrow">#2 · Shul Special Event</span>
+                          <strong>Optional programs and events</strong>
+                        </div>
+                        <span>Add only the events this shul is actually running. Each one becomes a linked Notice with its time, location and details.</span>
+                      </div>
+
+                      {predefinedEvents.map(eventType=>{
+                        const matchingEvents=customEventsByLabel(card.date,eventType.label);
+                        return (
+                          <div className="monthlyMonthSpecialEvent" key={eventType.key}>
+                            <div className="monthlyAdditionalHead">
+                              <strong>{eventType.label}</strong>
+                              <span>Optional. Add more than one if the shul has multiple times or programs.</span>
+                            </div>
+
+                            {matchingEvents.length>0&&(
+                              <div className="monthlyCustomEventList">
+                                {matchingEvents.map(event=>(
+                                  <div className="monthlyCustomEventRow" key={event.id}>
+                                    <label>
+                                      <span>Time</span>
+                                      <input
+                                        type="time"
+                                        value={event.time}
+                                        onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"time",e.target.value)}
+                                      />
+                                    </label>
+                                    <label>
+                                      <span>Location <small>(optional)</small></span>
+                                      <input
+                                        value={event.location}
+                                        placeholder="Social hall, main shul, address…"
+                                        onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"location",e.target.value)}
+                                      />
+                                    </label>
+                                    <label className="monthlySpecialEventDetails">
+                                      <span>Details <small>(optional)</small></span>
+                                      <textarea
+                                        value={event.details}
+                                        placeholder="Program details, deadline, instructions, sponsor…"
+                                        onChange={e=>updateMonthlyCustomEvent(card.date,event.id,"details",e.target.value)}
+                                      />
+                                    </label>
+                                    <button
+                                      type="button"
+                                      className="secondary monthlyRemoveTime"
+                                      onClick={()=>removeMonthlyCustomEvent(card.date,event.id)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              className="secondary monthlyAddTime monthlyAddSpecialEvent"
+                              onClick={()=>addPredefinedMonthlyEvent(card.date,eventType.label)}
+                            >
+                              + Add {eventType.label}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
