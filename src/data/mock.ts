@@ -130,28 +130,34 @@ export const jewishMonthTemplates: JewishMonthTemplate[] = [
     {key:"asarah_mincha",label:"Fast-Day Mincha",appliesTo:"10 Teves",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
   ]},
   {month:"Shevat",specialItems:[
-    {key:"tu_bishvat_event",label:"Tu B'Shvat Program",appliesTo:"15 Shevat",defaultDisplay:false}
+    {key:"tu_bishvat_party",label:"Tu B'Shvat Party",appliesTo:"15 Shevat",defaultDisplay:false}
   ]},
   {month:"Adar",specialItems:[
     {key:"taanis_esther",label:"Taanis Esther Schedule",appliesTo:"Taanis Esther",defaultDisplay:true},
-    {key:"megillah_night",label:"Megillah - Night",appliesTo:"Purim",defaultDisplay:true},
-    {key:"megillah_day",label:"Megillah - Day",appliesTo:"Purim",defaultDisplay:true},
-    {key:"purim_program",label:"Purim Program / Seudah",appliesTo:"Purim",defaultDisplay:false}
+    {key:"megillah_night",label:"Megillah - Night",appliesTo:"Purim night",defaultDisplay:true,helpText:"Supports multiple Megillah readings."},
+    {key:"megillah_day",label:"Megillah - Day",appliesTo:"Purim day",defaultDisplay:true,helpText:"Supports multiple Megillah readings."},
+    {key:"purim_party",label:"Purim Party",appliesTo:"Taanis Esther / Purim",defaultDisplay:false}
   ]},
   {month:"Nissan",specialItems:[
-    {key:"shabbos_hagadol",label:"Shabbos Hagadol Drasha",appliesTo:"Shabbos Hagadol",defaultDisplay:false},
-    {key:"siyum_bechorim",label:"Siyum Bechorim",appliesTo:"Erev Pesach",defaultDisplay:true},
-    {key:"chametz_deadlines",label:"Chametz Deadlines",appliesTo:"Erev Pesach",defaultDisplay:true},
-    {key:"pesach_shacharis",label:"Pesach Shacharis",appliesTo:"Pesach",defaultDisplay:true},
-    {key:"pesach_yizkor",label:"Pesach Yizkor",appliesTo:"Last day of Pesach",defaultDisplay:true}
+    {key:"shabbos_hagadol",label:"Shabbos HaGadol Drasha",appliesTo:"Shabbos HaGadol",defaultDisplay:false},
+    {key:"erev_pesach_schedule",label:"Erev Pesach Minyan Changes",appliesTo:"Erev Pesach",defaultDisplay:true},
+    {key:"siyum_bechorim",label:"Siyum Bechorim",appliesTo:"Erev Pesach",defaultDisplay:false},
+    {key:"biur_chametz",label:"Biur Chametz",appliesTo:"Erev Pesach",defaultDisplay:false},
+    {key:"mechiras_chametz",label:"Mechiras Chametz",appliesTo:"Erev Pesach",defaultDisplay:false},
+    {key:"pesach_schedule",label:"Pesach Schedule",appliesTo:"Pesach / Chol Hamoed",defaultDisplay:true},
+    {key:"pesach_chatzos",label:"Chatzos HaLailah",appliesTo:"Both Seder nights",defaultDisplay:true,helpText:"Automatic from MyZmanim."},
+    {key:"pesach_yizkor",label:"Pesach Yizkor",appliesTo:"Eighth day of Pesach",defaultDisplay:true}
   ]},
   {month:"Iyar",specialItems:[
-    {key:"lag_baomer",label:"Lag B'Omer Program",appliesTo:"18 Iyar",defaultDisplay:false}
+    {key:"sefirah",label:"Sefiras HaOmer",appliesTo:"Every day through Shavuos",defaultDisplay:true,helpText:"Automatic; begins on the second night of Pesach."},
+    {key:"lag_baomer",label:"Lag B'Omer Event",appliesTo:"18 Iyar",defaultDisplay:false}
   ]},
   {month:"Sivan",specialItems:[
-    {key:"shavuos_learning",label:"Shavuos Night Learning",appliesTo:"Shavuos",defaultDisplay:true},
-    {key:"shavuos_shacharis",label:"Shavuos Shacharis",appliesTo:"Shavuos",defaultDisplay:true},
-    {key:"shavuos_yizkor",label:"Shavuos Yizkor",appliesTo:"Shavuos",defaultDisplay:true}
+    {key:"sefirah",label:"Sefiras HaOmer",appliesTo:"Through the final count before Shavuos",defaultDisplay:true,helpText:"Automatic."},
+    {key:"erev_shavuos_schedule",label:"Erev Shavuos Minyan Changes",appliesTo:"Erev Shavuos",defaultDisplay:true},
+    {key:"tikkun_leil_shavuos",label:"Tikkun Leil Shavuos",appliesTo:"First night",defaultDisplay:false},
+    {key:"shavuos_schedule",label:"Shavuos Schedule",appliesTo:"Both days",defaultDisplay:true},
+    {key:"shavuos_yizkor",label:"Shavuos Yizkor",appliesTo:"Second day",defaultDisplay:true}
   ]},
   {month:"Tammuz",specialItems:[
     {key:"17_tammuz_mincha",label:"Fast-Day Mincha",appliesTo:"17 Tammuz",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
@@ -159,9 +165,13 @@ export const jewishMonthTemplates: JewishMonthTemplate[] = [
   {month:"Av",specialItems:[
     {key:"tisha_bav_maariv",label:"Tisha B'Av Maariv / Eicha",appliesTo:"Tisha B'Av",defaultDisplay:true},
     {key:"tisha_bav_shacharis",label:"Tisha B'Av Shacharis",appliesTo:"Tisha B'Av",defaultDisplay:true},
-    {key:"tisha_bav_mincha",label:"Tisha B'Av Mincha",appliesTo:"Tisha B'Av",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."}
+    {key:"tisha_bav_mincha",label:"Tisha B'Av Mincha",appliesTo:"Tisha B'Av",defaultDisplay:true,helpText:"Fast start/end are automatic from MyZmanim."},
+    {key:"tisha_bav_program",label:"Tisha B'Av Program",appliesTo:"Tisha B'Av",defaultDisplay:false},
+    {key:"tu_bav_program",label:"Tu B'Av Program",appliesTo:"15 Av",defaultDisplay:false}
   ]},
   {month:"Elul",specialItems:[
-    {key:"selichos",label:"Selichos",appliesTo:"Configured Selichos days",defaultDisplay:true,helpText:"Date pattern depends on minhag; organization settings determine when it begins."}
+    {key:"selichos",label:"Selichos",appliesTo:"Configured Selichos days",defaultDisplay:true,helpText:"Recurring through Erev Rosh Hashana; date pattern depends on minhag."},
+    {key:"erev_rosh_hashana",label:"Erev Rosh Hashana Schedule",appliesTo:"29 Elul",defaultDisplay:true},
+    {key:"hataras_nedarim",label:"Hataras Nedarim",appliesTo:"29 Elul",defaultDisplay:true}
   ]}
 ];
