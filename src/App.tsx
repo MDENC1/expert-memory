@@ -10,6 +10,7 @@ import DevicesPage from "./pages/DevicesPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import { PILOT_SHUL_ID, supabase } from "./lib/supabase";
+import { isSederChatzosDate, omerTextForDate } from "./lib/jewishCalendarDisplay";
 
 type Tab = "dashboard" | "calendar" | "monthly" | "notices" | "devices" | "settings" | "super" | "onboarding";
 
@@ -101,6 +102,7 @@ type PreviewZmanimBatch = {
   sunrise?: Record<string,string>;
   latestShema?: Record<string,string>;
   midday?: Record<string,string>;
+  midnight?: Record<string,string>;
   candleLighting?: Record<string,string>;
   sources?: Record<string,Record<string,string>>;
 };
@@ -395,6 +397,34 @@ function buildLiveDay(
   const shabbosEnds=dow===6&&sunsetMinutes!==null
     ? sunsetMinutes+shabbosEndMinutes
     : null;
+  const sederChatzosMinutes=isSederChatzosDate(today)
+    ?timeMinutesFromIso(zmanim.midnight?.[today]||zmanim.sources?.midnight?.[today])
+    :null;
+
+  const prominentTimes:NonNullable<CalendarDay["specialTimes"]>=[];
+  if(fridayCandleLighting!==null){
+    prominentTimes.push({
+      key:"candle_lighting",
+      label:"Candle Lighting",
+      time:minutesToDisplay(fridayCandleLighting),
+      importance:"prominent"
+    });
+  }else if(shabbosEnds!==null){
+    prominentTimes.push({
+      key:"shabbos_ends",
+      label:"Shabbos Ends",
+      time:minutesToDisplay(shabbosEnds),
+      importance:"prominent"
+    });
+  }
+  if(sederChatzosMinutes!==null){
+    prominentTimes.push({
+      key:"seder_chatzos",
+      label:"Chatzos HaLailah",
+      time:minutesToDisplay(sederChatzosMinutes),
+      importance:"prominent"
+    });
+  }
 
   const base:CalendarDay={
     date:today,
@@ -410,21 +440,8 @@ function buildLiveDay(
     template:(!isGenericSpecialTitle(specialDay?.title) ? specialDay?.title : undefined)
       || specialRequirement?.group_label
       || (dow===6 ? "Shabbos" : "Regular"),
-    specialTimes:fridayCandleLighting!==null
-      ? [{
-          key:"candle_lighting",
-          label:"Candle Lighting",
-          time:minutesToDisplay(fridayCandleLighting),
-          importance:"prominent"
-        }]
-      : shabbosEnds!==null
-        ? [{
-            key:"shabbos_ends",
-            label:"Shabbos Ends",
-            time:minutesToDisplay(shabbosEnds),
-            importance:"prominent"
-          }]
-        : undefined
+    specialTimes:prominentTimes.length?prominentTimes:undefined,
+    omerText:omerTextForDate(today)
   };
 
   if(manualOverrides.length){
