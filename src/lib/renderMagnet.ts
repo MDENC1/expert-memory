@@ -392,7 +392,11 @@ function drawCanonicalScreen(
 
   ctx.fillRect(18, footerTop, 612, 2);
   ctx.font = "700 12px Arial, sans-serif";
-  ctx.fillText(day.isRoshChodesh ? "Rosh Chodesh" : "Schedule", 18, footerTop + 9);
+  const footerLeft=[
+    day.isRoshChodesh?"Rosh Chodesh":"",
+    day.omerText||""
+  ].filter(Boolean).join(" · ")||"Schedule";
+  ctx.fillText(clippedText(ctx,footerLeft,300), 18, footerTop + 9);
   ctx.textAlign = "right";
   if(day.dafYomi){
     const englishDaf=`Daf Yomi: ${day.dafYomi}`;
